@@ -7,10 +7,10 @@
     {
       "id": "dian115.virtual-cache",
       "title": "MANIA",
-      "version": "2.1.2",
+      "version": "2.1.3",
       "description": "连接自己的 MANIA / DIAN115 服务；在模块设置中填写服务器地址与 API。",
       "url": "./mania.prism",
-      "sha256": "130ca2c108b8c3a0a008255f6596f642f0243b1b1da297b995243b4fb495d4f4"
+      "sha256": "131ace5b423e06fabfde597e2e06cf74b0ebc0b19aab828c5e0321b100913810"
     }
   ]
 }
