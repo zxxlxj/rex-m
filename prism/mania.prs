@@ -1,0 +1,16 @@
+{
+  "format": "prism.collection",
+  "version": 1,
+  "title": "MANIA",
+  "description": "自部署媒体服务：分类、季集、多版本与原生播放。",
+  "modules": [
+    {
+      "id": "dian115.virtual-cache",
+      "title": "MANIA",
+      "version": "2.1.2",
+      "description": "连接自己的 MANIA / DIAN115 服务；在模块设置中填写服务器地址与 API。",
+      "url": "./mania.prism",
+      "sha256": "130ca2c108b8c3a0a008255f6596f642f0243b1b1da297b995243b4fb495d4f4"
+    }
+  ]
+}
