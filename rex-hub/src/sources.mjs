@@ -33,7 +33,7 @@ function publicUrl(value, base, wrapper = false) {
   if (/[\\#]/.test(input) || input.startsWith('//') || (!base && !/^https:\/\/[^/]/i.test(input)) || (/^[a-z][a-z0-9+.-]*:/i.test(input) && !/^https:\/\/[^/]/i.test(input))) fail('只允许无凭据的公开 HTTPS 网址');
   pathCheck(input);
   let url; try { url = new URL(input, base); } catch { fail('网址无效'); }
-  // URL.username/password miss an explicitly empty userinfo, hence the raw authority check.
+
   const authority = /^https:\/\/([^/?#]+)/i.exec(input)?.[1];
   if (url.protocol !== 'https:' || url.username || url.password || authority?.includes('@') || url.port || !publicHost(url.hostname)) fail('只允许无凭据的公开 HTTPS 网址');
   for (const [key, value] of url.searchParams) {
@@ -101,7 +101,7 @@ async function fetchSource(initial, previous, { raw = false, timeoutMs = 10_000 
       seen.add(u.href);
       const accept = raw ? 'application/javascript, text/javascript, text/plain, application/octet-stream, */*;q=0.1' : 'application/json, application/javascript, text/plain, */*;q=0.1';
       const headers = new Headers({ Accept: accept, 'Cache-Control': 'no-cache' });
-      // A validator belongs to the exact effective URL, never a redirect target on another host.
+
       if (previous?.effectiveUrl === u.href) {
         if (safeHeader(previous.etag)) headers.set('If-None-Match', previous.etag);
         if (safeHeader(previous.lastModified)) headers.set('If-Modified-Since', previous.lastModified);
@@ -132,7 +132,7 @@ async function fetchSource(initial, previous, { raw = false, timeoutMs = 10_000 
   } finally { clearTimeout(timer); }
 }
 
-// Mirror callers cannot bypass the same initial/redirect URL guards used by ingestion.
+
 export function fetchMirrorBytes(url, previous) {
   return fetchSource(publicUrl(url), previous, { raw: true, timeoutMs: 8_000 });
 }
@@ -215,7 +215,7 @@ function importFiles(files) {
     if (names.has(name.toLowerCase())) fail('上传的文件名重复', 422);
     names.add(name.toLowerCase());
     if (f.text.length > LIMIT) fail('单个文件不能超过 1 MiB', 413);
-    // File payloads are JSON strings. Reject lone surrogates instead of silently changing their bytes.
+
     if (/[\uD800-\uDFFF]/u.test(f.text)) fail('文件内容不是有效的 Unicode', 422);
     const bytes = encode.encode(f.text); total += bytes.length;
     if (!bytes.length) fail('不能上传空文件', 422);
@@ -255,7 +255,7 @@ async function parseUpload(input, env, origin) {
       localOrigin = local.origin;
     }
     const fallback = row ? { ...manual, ...Object.fromEntries(META.filter(k => row[k] != null && row[k] !== '').map(k => [k, row[k]])), icon: row.icon || row.iconurl || row.iconUrl || row.iconURL || manual.icon } : (js.length === 1 ? manual : {});
-    // Collection metadata is authoritative for encrypted companions; plaintext uses the literal manifest.
+
     const meta = jsMeta(file.payload, base, fallback);
     if (row && own(row, 'id') && text(row.id, 160, '合集模块 ID', true) !== meta.id) fail('合集模块 ID 与上传文件不一致', 422);
     const path = `/files/${await hash(file.bytes)}.js`;
@@ -270,8 +270,8 @@ async function parseUpload(input, env, origin) {
     const byName = new Map(js.map(f => [f.name, f]));
     for (const row of index.rows) {
       const spec = assertRow(row);
-      // Validate remote URL syntax even when replacing it with an uploaded companion.
-      // A relative bare filename can resolve locally without a base; other references need one.
+
+
       const url = /^https:\/\//i.test(spec) || base ? publishUrl(spec, base, true) : '';
       const localName = companionName(spec, base), file = byName.get(localName);
       if (file) {
@@ -292,7 +292,7 @@ async function parseUpload(input, env, origin) {
   unique(modules);
   if (stored.size) {
     if (typeof env?.FILES?.put !== 'function') fail('缺少 FILES 存储绑定', 500);
-    // All inputs have been validated before first put. Rewriting a hash key can only write identical bytes.
+
     try { for (const [key, bytes] of stored) await env.FILES.put(key, bytes, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=86400, immutable' } }); }
     catch { fail('无法保存上传文件', 503); }
   }
@@ -327,7 +327,7 @@ function reconcile(previous, incoming) {
     return last?.paused ? { ...last, removed: false } : saved ? { ...m, ...override(saved) } : m;
   });
   for (const m of old.values()) {
-    // Keep paused JS and metadata live even if absent upstream; removed is an admin UI marker.
+
     if (m.paused) modules.push({ ...m, removed: true });
     else if (m.disabled || m.categoryId) tombs.set(m.id, { id: m.id, ...override(m), until: time + RETAIN_MS });
   }

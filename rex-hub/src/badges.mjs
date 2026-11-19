@@ -1,8 +1,8 @@
-// Auth and the 10 MiB POST parser belong to the Worker router. Bind DB and
-// FILES (put/get/delete, with the same body contract as the hub's file routes).
-// One UTC day's badge work reserves at most 850 KV puts and 850 deletes,
-// conservatively including failures. Other hub writes share the account quota;
-// coordinate large imports and mirrors. KV visibility can lag after a write.
+
+
+
+
+
 const MiB = 1024 * 1024, BATCH = 8, PAGE = 48, QUOTA = 850;
 const ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069\ufffd]/u;
@@ -24,7 +24,7 @@ function str(v, max, label) {
   return v.trim();
 }
 
-// Same URL restrictions as sources.mjs publicUrl (no Rex wrapper exception).
+
 function publicUrl(value, base) {
   const input = str(value, 2048, '网址');
   const https = /^https:\/\/[^/]/i;
@@ -91,8 +91,8 @@ async function load(initial, image = false) {
   } finally { clearTimeout(timer); }
 }
 
-// Review/display imageURL fields only. Regex patterns, SVG data, colors and
-// unknown schema fields remain inert JSON data; nothing is evaluated.
+
+
 function visit(root, f, depth = 0) {
   if (depth > 48) fail('徽章包 JSON 嵌套过深', 422);
   if (!root || typeof root !== 'object') return;
@@ -136,9 +136,9 @@ function mime(bytes) {
   if (ascii(0,'GIF87a') || ascii(0,'GIF89a')) return 3;
   if (ascii(0,'RIFF') && ascii(8,'WEBP')) return 4;
   if (ascii(4,'ftyp') && (ascii(8,'avif') || ascii(8,'avis'))) return 5;
-  // Recognize the document root, not an <svg> nested in arbitrary HTML.
-  // SVG is never parsed or rendered here. Permit a conventional public DTD
-  // declaration (no internal subset) and keep the browser response sandboxed.
+
+
+
   try {
     let head = new TextDecoder().decode(bytes.subarray(0,4096)).trimStart();
     if (/^<\?xml\s/.test(head)) head = head.replace(/^<\?xml\s[^?]*\?>\s*/, '');
@@ -242,7 +242,7 @@ async function importPack(env,a) {
     const {d,n} = await budget(env,'puts');
     if (n<2) fail('今日徽章写入预算已用完，请于上海时间 08:00 配额重置后重试',429);
     const time = now();
-    // Stage a tombstone before writing KV so a killed import can be cleaned up.
+
     await env.DB.batch([debit(env,t,d,2,0),sql(env,`INSERT INTO badge_packs
       (id,alias,mode,url,base,groups,filters,assets,created,touched,deleting,cleanup)
       SELECT ?,?,?,?,?,?,?,?,?,?,1,1 WHERE ${guard}`,id,alias,mode,url,base,data.groups.length,data.filters.length,targets.length,time,time,t)]);
@@ -304,8 +304,8 @@ async function processPack(env,p,t) {
   const targets = JSON.parse(dec.decode(bytes));
   if (targets.length!==p.assets) fail('徽章图片清单暂不可用',503);
   const last = slots.at(-1);
-  // Reserve quota and journal the maximum possible written slot before any IO.
-  // Replaying after abrupt termination uses the same immutable slot keys.
+
+
   await env.DB.batch([debit(env,t,d,slots.length,0),sql(env,`UPDATE badge_packs SET highwater=MAX(highwater,?) WHERE id=? AND ${guard}`,last+1,p.id,t)]);
   const outcomes=[];
   for (let i=0; i<slots.length; i+=4) outcomes.push(...await Promise.all(slots.slice(i,i+4).map(async slot=>{
@@ -346,9 +346,9 @@ async function clean(env,p,t) {
   else await run(env,`UPDATE badge_packs SET cleanup_cursor=?,touched=? WHERE id=? AND ${guard}`,end,now(),p.id,t);
 }
 
-// Schedule this independently of sync/mirror invocations. Up to 16 upstream
-// requests + 24 adapter KV calls (get/put/get on error), 1 source get, and
-// <=9 D1 round trips including caller authentication for manual processing.
+
+
+
 export async function badgeTick(env,_origin) {
   return lock(env,async t=>{
     const p=await first(env,`SELECT p.* FROM badge_packs p CROSS JOIN badge_state s WHERE s.id=1 AND (

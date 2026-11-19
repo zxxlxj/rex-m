@@ -38,7 +38,7 @@ function dueAt(source, m, now) {
   return checked === -Infinity ? 0 : checked + minutes * 60_000;
 }
 
-// Pass the publishing origin when available so same-site files do not occupy scheduler slots.
+
 export function mirrorDue(source, now = Date.now(), origin = source.origin) {
   const site = localOrigin(origin);
   let due = Infinity;
@@ -54,12 +54,12 @@ function snapshotVersion(module, bytes, contentType, effectiveUrl) {
     throw new Error('上游返回的是网页、清单或图片，而不是模块');
   }
   let text;
-  try { text = utf8.decode(bytes); } catch { /* An opaque encrypted payload need not be UTF-8. */ }
+  try { text = utf8.decode(bytes); } catch {                                                      }
   if (text !== undefined && !text.trim()) throw new Error('上游模块为空');
 
   const marker = REX_ENCRYPTED.test(text ?? head);
   if (marker) {
-    // Recognize the envelope, not its contents: never decrypt or rewrite bytes.
+
     const rest = (text ?? head).replace(REX_ENCRYPTED, '');
     if (!rest.replace(/^[\s:\d-]+/, '').trim() && (text !== undefined || bytes.length <= 512)) {
       throw new Error('上游 Rex 加密模块缺少有效内容');
@@ -67,13 +67,13 @@ function snapshotVersion(module, bytes, contentType, effectiveUrl) {
   } else if (text !== undefined) {
     if (text.includes('\0') && /\bWidgetMetadata\s*=/.test(text)) throw new Error('上游明文模块含有空字符');
     let metadata;
-    try { metadata = parseManifestLiteral(text); } catch { /* Checked below. */ }
+    try { metadata = parseManifestLiteral(text); } catch {                      }
     if (metadata !== undefined) {
       if (!fields(metadata) || !Array.isArray(metadata.modules)) throw new Error('上游 WidgetMetadata 不完整或无效');
       if (metadata.id !== module.id) throw new Error('上游 WidgetMetadata ID 与来源模块不一致');
       return { version: metadata.version.trim(), requiredVersion: metadata.requiredVersion.trim(), literal: true };
     }
-    // Do not pass a broken plaintext declaration off as an opaque encrypted module.
+
     if (/\bWidgetMetadata\s*=/.test(text)) throw new Error('无法静态验证上游 WidgetMetadata');
     if (/^\s*[\[{]/.test(text)) {
       let json = false;
@@ -82,7 +82,7 @@ function snapshotVersion(module, bytes, contentType, effectiveUrl) {
     }
   }
 
-  // An opaque payload has no readable version; trust only the matching source entry.
+
   if (!fields(module)) throw new Error('不透明模块需要来源提供有效的 ID、标题、版本和所需版本');
   const scriptMime = /^(?:application|text)\/(?:javascript|ecmascript|x-javascript)$/.test(mime);
   const scriptPath = [module.url, effectiveUrl].some(url => /\.js$/i.test(new URL(url).pathname));
@@ -127,12 +127,12 @@ async function check(module, env, site) {
       stage = 'store';
       await env.FILES.put(key, bytes, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=86400, immutable' } });
     }
-    // A changed index version alone does not turn unchanged opaque bytes into a new version.
+
     const keepVersion = !meta.literal && hash === success?.hash;
     const { version, requiredVersion } = keepVersion ? success : meta;
     return { url: `${site}/${key}`, version, requiredVersion, hash, remoteUrl, checkedAt: timestamp(), ...validators };
   } catch (e) {
-    // Do not surface storage/provider error details; upstream helper errors omit the URL.
+
     const error = stage === 'store' ? '无法保存镜像文件' : e?.message || '无法检查镜像';
     return { ...(success || { url: '', version: '', hash: '', remoteUrl }), checkedAt: timestamp(), error };
   }

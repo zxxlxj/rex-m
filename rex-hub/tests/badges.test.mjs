@@ -124,7 +124,7 @@ test('imports actual Rex badge packs and walks the 1556-image queue', {skip:!exi
     const p=(await api('')).items.find(x=>x.id===id);
     assert.equal(p.groups,groups); assert.equal(p.assets,assets); assert.equal(p.filters,assets);
     if(assets===1556){
-      // Exhaust the daily budget (including all 10 source and plan writes), then simulate the next UTC day.
+
       for(let i=0;i<106;i++)await api('/process',{id});
       assert.equal((await api('')).items.find(x=>x.id===id).done,840);
       db.exec("UPDATE badge_state SET quota_day='2000-01-01'");

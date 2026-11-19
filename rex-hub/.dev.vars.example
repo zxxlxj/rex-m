@@ -1,2 +1,1 @@
-# Generate your own random value, for example: openssl rand -hex 32
 SETUP_TOKEN=

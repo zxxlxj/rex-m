@@ -26,7 +26,7 @@ function fixture(t) {
     };
   }
   const DB = {prepare, async batch(statements) {
-    // Execute all synchronous SQLite calls before yielding, like a D1 transaction.
+
     sqlite.exec('BEGIN');
     try {
       const results = await Promise.all(statements.map(statement => statement.run()));

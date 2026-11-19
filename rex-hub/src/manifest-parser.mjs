@@ -1,4 +1,4 @@
-// Deliberately static: supports literal objects, never evaluates arbitrary JS.
+
 export function rejectEncrypted(source) {
   if (/^\s*(?:\/\/\s*)?REXENC/i.test(source)) throw new Error('加密模块请在 App 内测试');
 }
@@ -49,7 +49,7 @@ export function parseManifestLiteral(source) {
     }
     depth--; return v;
   }
-  // Metadata must be a top-level literal declaration before executable code.
+
   ws(); if (source.startsWith('"use strict"',i) || source.startsWith("'use strict'",i)) { str(); ws(); if(source[i]===';') i++; ws(); }
   let name = ident(); if (['var','let','const'].includes(name)) { ws(); name = ident(); }
   ws(); if (name !== 'WidgetMetadata' || source[i++] !== '=') throw Error('静态校验要求文件开头为 WidgetMetadata 字面量声明（可含注释）');

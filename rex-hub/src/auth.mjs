@@ -1,5 +1,5 @@
 const encoder = new TextEncoder();
-const ITERATIONS = 100_000; // workerd PBKDF2 cap; use a Workers Paid CPU budget.
+const ITERATIONS = 100_000;
 const SESSION_TTL = 24 * 60 * 60;
 const ATTEMPT_WINDOW = 15 * 60;
 const MAX_CREDENTIAL_BYTES = 1024;
@@ -28,11 +28,11 @@ function credential(value, minimum = 1) {
 }
 
 async function equal(left, right) {
-  // All callers use fixed-size, 32-byte inputs. workerd supplies this extension.
+
   if (typeof crypto.subtle.timingSafeEqual === 'function') {
     return crypto.subtle.timingSafeEqual(left, right);
   }
-  // Standard WebCrypto fallback (Node): native HMAC verification, no JS byte comparison.
+
   const key = await crypto.subtle.importKey('raw', random(32), {name:'HMAC', hash:'SHA-256'}, false, ['sign','verify']);
   return crypto.subtle.verify('HMAC', key, await crypto.subtle.sign('HMAC', key, left), right);
 }
@@ -46,7 +46,7 @@ function cookieMode(request, env) {
   const url = new URL(request.url);
   if (url.protocol === 'https:') return {name:'__Host-rex_session', secure:true};
   if (url.protocol !== 'http:' || !['localhost','127.0.0.1','[::1]'].includes(url.hostname)) return null;
-  // Keep Secure by default even on localhost; opt in only on a local dev server.
+
   return env.AUTH_ALLOW_INSECURE_LOCALHOST === '1'
     ? {name:'rex_local_session', secure:false}
     : {name:'__Host-rex_session', secure:true};
@@ -74,8 +74,8 @@ async function isInitialized(db) {
 }
 
 async function takeAttempt(request, db, action) {
-  // Cloudflare supplies CF-Connecting-IP at ingress. Never trust X-Forwarded-For;
-  // requests without an address share a single fallback bucket.
+
+
   const raw = request.headers.get('CF-Connecting-IP') || '';
   const ip = /^[0-9a-f:.]{1,45}$/i.test(raw) ? raw.toLowerCase() : 'unknown';
   const globalBucket = `${action}:all`;
@@ -83,8 +83,8 @@ async function takeAttempt(request, db, action) {
   const now = nowSeconds(), reset = now + ATTEMPT_WINDOW;
   const globalLimit = action === 'setup' ? 24 : 48;
   const ipLimit = action === 'setup' ? 6 : 8;
-  // One SQL statement admits both buckets or neither, even across isolates.
-  // An IP already at its own limit cannot consume the global quota by retrying.
+
+
   const result = await db.prepare(`WITH limits(bucket, cap) AS (VALUES (?, ?), (?, ?))
     INSERT INTO auth_attempts (bucket, count, resets_at)
     SELECT bucket, 1, ? FROM limits
@@ -131,8 +131,8 @@ export async function setup(request, env, input) {
   const salt = random(16), saltHex = hex(salt);
   const hash = hex(await derive(input.password, salt));
   const token = hex(random(32)), now = nowSeconds();
-  // A transactional D1 batch creates the initial session only for the winning
-  // INSERT. Its fresh salt links the session write to this setup attempt.
+
+
   const [admin, createdSession] = await db.batch([
     db.prepare(`INSERT INTO auth_admin (id, salt, hash, created_at) VALUES (1, ?, ?, ?)
       ON CONFLICT(id) DO NOTHING`).bind(saltHex, hash, new Date(now * 1000).toISOString()),

@@ -47,7 +47,7 @@ function render() {
 }
 
 const IS_MOUNTED = new WeakMap();
-// api accepts paths relative to /api/; the returned cleanup is optional on DOM removal.
+
 function attach(root, { api = localApi, toast } = {}) {
   if (!root) return;
   if (!root.matches('[data-rex-badges]')) root = root.querySelector('[data-rex-badges]');
@@ -159,7 +159,7 @@ function attach(root, { api = localApi, toast } = {}) {
       preview.open=true;
       heading.focus({preventScroll:true});
       preview.scrollIntoView({block:'nearest'});
-      if(!wasOpen)return; // Opening triggers the toggle listener below.
+      if(!wasOpen)return;
     }
     if(preview.open)void loadPreview();
   }
@@ -230,7 +230,7 @@ function attach(root, { api = localApi, toast } = {}) {
   }
   on(results,'error',event => { if (event.target.matches?.('[data-rb-img]')) imageFallback(event.target); },{capture:true});
 
-  // One batch at a time per mounted view; cap stalled work until manually resumed.
+
   function schedule() {
     if (!alive() || processTimer || running.size) return;
     const item = data.items.find(item => item.status === 'queued' && !pending.has(item.id) && !stopped.has(item.id));

@@ -4,7 +4,7 @@ self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('rex-hub-shell-')&&key!==CACHE)await caches.delete(key);await self.clients.claim();})()));
 self.addEventListener('fetch',event=>{
   const req=event.request, u=new URL(req.url);
-  // Never cache session, API, badge JSON, badge images or distributable modules.
+
   if(req.method!=='GET'||u.origin!==self.location.origin||!SHELL.includes(u.pathname))return;
   event.respondWith((async()=>{
     const cache=await caches.open(CACHE);

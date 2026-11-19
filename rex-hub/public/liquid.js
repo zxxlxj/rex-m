@@ -1,4 +1,4 @@
-/* Decoration only: app.js owns tab names, activation, routing, data and dialogs. */
+
 (() => {
   const app = document.getElementById('app');
   if (!app) return;
@@ -58,7 +58,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load',()=>{void navigator.serviceWorker.register('/sw.js').catch(()=>{});},{once:true});
 }
 
-// iOS standalone has no Safari pull-to-refresh chrome.
+
 (() => {
   const app=document.getElementById('app');if(!app)return;
   const standalone=matchMedia('(display-mode: standalone)');

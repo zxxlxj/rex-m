@@ -1,4 +1,4 @@
-/* Rex Hub · Badge workbench. All selectors and data attributes are local. */
+
 .rb {
   --rb-ink:var(--lg-label,#182443); --rb-muted:var(--lg-secondary,#53617b);
   --rb-tint:var(--lg-tint,#2052ba); --rb-blue:var(--lg-fill,#245bc9); --rb-on:var(--lg-on-fill,#fff);

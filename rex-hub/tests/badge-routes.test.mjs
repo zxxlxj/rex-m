@@ -8,7 +8,7 @@ test('badge hosts JSON and image, switches stable URL and removes owned objects'
  const db=new DatabaseSync(':memory:');t.after(()=>db.close());db.exec(readFileSync(new URL('../migrations/0003_badges.sql',import.meta.url),'utf8'));
  const prepare=(q,args=[])=>({bind:(...a)=>prepare(q,a),first:async()=>db.prepare(q).get(...args)??null,all:async()=>({results:db.prepare(q).all(...args)}),run:async()=>({meta:{changes:db.prepare(q).run(...args).changes}})});
  const fs=new Map(),env={DB:{prepare,async batch(xs){db.exec('BEGIN');try{const rs=[];for(const x of xs){try{rs.push(await x.all());}catch{rs.push(await x.run());}}db.exec('COMMIT');return rs;}catch(e){db.exec('ROLLBACK');throw e;}}},FILES:{async put(k,v){fs.set(k,v);},async get(k){return fs.has(k)?{body:fs.get(k)}:null;},async delete(k){fs.delete(k);}}};
- // D1 batch returns results for selects, and changes for writes.
+
  env.DB.batch=async xs=>{db.exec('BEGIN');try{const out=[];for(const x of xs)out.push(await x.exec());db.exec('COMMIT');return out;}catch(e){db.exec('ROLLBACK');throw e;}};
  const prep=env.DB.prepare;env.DB.prepare=(q)=>{const wrap=x=>({...x,bind:(...a)=>wrap(x.bind(...a)),exec:()=>/^\s*SELECT\b/i.test(q)?x.all():x.run()});return wrap(prep(q));};
  const data={groups:[{id:'g',name:'分辨率'}],filters:[{id:'f',groupId:'g',name:'4K',imageURL:ext,pattern:'(?i)4k'}],custom:{keep:true}};

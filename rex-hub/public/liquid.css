@@ -1,4 +1,4 @@
-/* Rex Hub · material and typography layer. Load after style/distributions/badges. */
+
 :root {
   color-scheme: light dark;
   --lg-base:#f2f2f7; --lg-group:#fff; --lg-inset:#f2f2f7; --lg-control:#e9e9ef;
@@ -83,7 +83,7 @@ body { background:var(--lg-base); background-attachment:scroll; color:var(--lg-l
 #app .auth { padding:26px; animation:lg-screen .26s var(--lg-smooth) both; }
 #app .auth .brand { margin-bottom:6px; }
 
-/* Grouped lists: no blur, gradient or shadow per row. */
+
 #app .library-panel { min-width:0; }
 #app .library-panel>.library-search { display:block; margin:12px 12px 4px; width:calc(100% - 24px); }
 #app .library-source>summary { min-height:65px; padding:8px 15px; gap:12px; }
@@ -119,7 +119,7 @@ body { background:var(--lg-base); background-attachment:scroll; color:var(--lg-l
 #dialog :is(.dist-picker,.dist-form-extra,.dist-results,.box) { border:1px solid var(--lg-rule); border-radius:12px; background:var(--lg-inset); box-shadow:none; }
 #dialog .dist-group summary { background:var(--lg-inset); backdrop-filter:none; -webkit-backdrop-filter:none; }
 
-/* Controls. Plain buttons stay legible on the inset backgrounds as well. */
+
 :is(#app,#dialog) .btn { min-height:44px; padding:7px 13px; border:0; border-radius:100px; background:var(--lg-control); box-shadow:none; color:var(--lg-label); font-size:14px; font-weight:650; transition:transform .22s var(--lg-spring),filter .16s,background .16s; }
 :is(#app,#dialog) .btn.primary { background:var(--lg-fill); color:var(--lg-on-fill); }
 :is(#app,#dialog) .btn.link { background:transparent; color:var(--lg-tint); }
@@ -144,7 +144,7 @@ body { background:var(--lg-base); background-attachment:scroll; color:var(--lg-l
   #app .stat .btn:hover { background:color-mix(in srgb,var(--lg-tint) 7%,transparent); }
 }
 
-/* Native dialog retains top-layer modality, Escape and focus restoration. */
+
 #dialog.glass,#app .rb dialog.rb-dialog { width:min(620px,calc(100% - 36px)); max-height:min(86dvh,900px); padding:20px; margin:auto; color:var(--lg-label); border:1px solid var(--lg-edge)!important; border-radius:25px; background:var(--lg-sheet)!important; box-shadow:inset 0 1px 0 var(--lg-light),var(--lg-shadow); backdrop-filter:blur(28px) saturate(145%); -webkit-backdrop-filter:blur(28px) saturate(145%); overscroll-behavior:contain; }
 #dialog[open],#app .rb dialog.rb-dialog[open] { animation:lg-modal-in .29s var(--lg-smooth) both; }
 #dialog::backdrop,#app .rb dialog.rb-dialog::backdrop { background:var(--lg-overlay); backdrop-filter:none; -webkit-backdrop-filter:none; }
@@ -174,7 +174,7 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
   #app .top [data-act=logout] { background:transparent; color:var(--lg-tint); }
 }
 @media (max-width:760px) {
-  /* No backdrop-filter on the ancestor: the bar needs the viewport as its containing block. */
+
   #app .top { position:static; z-index:auto; padding-block:calc(8px + env(safe-area-inset-top)) 6px; background:none; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
   #app .top>.row { display:flex; gap:8px; }
   #app .top [data-act=logout] { margin-inline-start:auto; background:transparent; color:var(--lg-tint); }
@@ -220,14 +220,14 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
   #app *,#app *::before,#app *::after,#dialog,#dialog *,#dialog::backdrop { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
 }
 
-/* PWA: keep controls below the iPhone status bar and Dynamic Island. */
+
 #app .auth-screen{padding-top:calc(18px + env(safe-area-inset-top));padding-bottom:calc(18px + env(safe-area-inset-bottom));padding-inline:max(6px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-right));}
 @media(display-mode:standalone){html{overscroll-behavior-y:none}#app .startup{margin-top:calc(12dvh + env(safe-area-inset-top))}}
 
 #app .log-pager{justify-content:center;gap:12px;padding-block:2px}
 #app .log-page-label{min-width:3.3em;text-align:center;font-variant-numeric:tabular-nums;color:var(--lg-muted,var(--muted))}
 
-/* Optical rim + continuous material down to the home indicator, not a detached bar. */
+
 #app .lg-bottom-edge{display:none}
 #app .lg-nav-puck{transition:transform 340ms cubic-bezier(.22,.79,.24,1),background-color 200ms ease;background:linear-gradient(180deg,color-mix(in srgb,var(--lg-edge) 30%,transparent),transparent 57%),var(--lg-puck);box-shadow:inset 0 1px 1px var(--lg-light), inset 0 -1px 1px var(--lg-rim)}
 #app .nav button{transition:color 180ms ease,transform 240ms var(--lg-spring)}
@@ -251,11 +251,11 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 
 .lg-pull{display:flex;align-items:center;gap:7px}.lg-pull[hidden]{display:none!important}.lg-pull>.lg-pull-icon{width:18px;flex:none;text-align:center;font-size:15px;line-height:1;color:var(--lg-tint)}.lg-pull[data-phase=done]>.lg-pull-icon{color:var(--lg-good);font-weight:800}.lg-pull[data-phase=loading]>.lg-pull-icon{width:12px;height:12px;border:2px solid var(--lg-rim);border-top-color:var(--lg-tint);border-radius:50%;animation:lg-pull-spin .65s linear infinite}.lg-pull[data-phase=loading]>.lg-pull-copy{animation:none}@keyframes lg-pull-spin{to{transform:rotate(360deg)}}
 
-/* The joke carries its own emoji; don't duplicate it with an extra leading glyph. */
+
 .lg-pull[data-phase=armed]>.lg-pull-icon{display:none}
 .lg-pull[data-phase=armed]>.lg-pull-copy{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:center;line-height:1.4}
 
-/* Pull feedback is a dial; the easter egg is a separate line below it. */
+
 .lg-pull{--pull-ring:var(--lg-tint);top:calc(env(safe-area-inset-top) + 22px);transform:translate(-50%,calc(var(--pull,0px)*.62));flex-direction:column;gap:7px;padding:0;background:none;box-shadow:none;border-radius:0;white-space:normal;width:max-content;max-width:calc(100vw - 28px)}
 .lg-pull-dial{position:relative;display:grid;place-items:center;width:54px;height:54px;flex:none;border-radius:50%;background:var(--lg-sheet);box-shadow:0 3px 14px #0002}
 .lg-pull-dial::before,.lg-pull-dial::after{position:absolute;content:'';border-radius:50%;pointer-events:none}
