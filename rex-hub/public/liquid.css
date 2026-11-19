@@ -226,3 +226,18 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 
 #app .log-pager{justify-content:center;gap:12px;padding-block:2px}
 #app .log-page-label{min-width:3.3em;text-align:center;font-variant-numeric:tabular-nums;color:var(--lg-muted,var(--muted))}
+
+/* Optical rim + continuous material down to the home indicator, not a detached bar. */
+#app .lg-bottom-edge{display:none}
+#app .lg-nav-puck{transition:transform 340ms cubic-bezier(.22,.79,.24,1),background-color 200ms ease;background:linear-gradient(180deg,color-mix(in srgb,var(--lg-edge) 30%,transparent),transparent 57%),var(--lg-puck);box-shadow:inset 0 1px 1px var(--lg-light), inset 0 -1px 1px var(--lg-rim)}
+#app .nav button{transition:color 180ms ease,transform 240ms var(--lg-spring)}
+#app .nav button:active{transition-duration:90ms;transform:scale(.92)}
+@media(max-width:760px){
+  #app .lg-bottom-edge{display:block;position:fixed;z-index:5;inset:auto 0 0;height:calc(88px + env(safe-area-inset-bottom));pointer-events:none;background:linear-gradient(to bottom,transparent 0%,color-mix(in srgb,var(--lg-base) 32%,transparent) 38%,color-mix(in srgb,var(--lg-base) 83%,transparent) 76%,var(--lg-base) 100%);backdrop-filter:blur(7px) saturate(.88);-webkit-backdrop-filter:blur(7px) saturate(.88);mask-image:linear-gradient(to bottom,transparent,#000 82%);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 82%)}
+  #app .top .nav{inset-inline:max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-right));bottom:calc(4px + env(safe-area-inset-bottom));padding:4px;backdrop-filter:blur(17px) saturate(145%);-webkit-backdrop-filter:blur(17px) saturate(145%);background:linear-gradient(180deg,color-mix(in srgb,var(--lg-edge) 25%,transparent),transparent 48%,color-mix(in srgb,var(--lg-base) 26%,transparent)),var(--lg-glass);box-shadow:inset 0 0 0 1px var(--lg-rim),inset 0 1px 1px var(--lg-edge),0 4px 10px color-mix(in srgb,var(--lg-label) 9%,transparent)}
+  #app .lg-nav-puck{inset:4px auto 4px 4px;width:calc((100% - 8px) / var(--lg-count))}
+  #app .top .nav::before{inset:1px 2px auto;height:50%;background:linear-gradient(180deg,var(--lg-light),transparent 58%);opacity:.42}
+  #app .top .nav>button{min-height:51px}
+}
+@media(prefers-reduced-transparency:reduce){#app .lg-bottom-edge,#app .top .nav{backdrop-filter:none;-webkit-backdrop-filter:none}#app .top .nav{background:var(--lg-group)}}
+@media(prefers-reduced-motion:reduce){#app .lg-nav-puck,#app .nav button{transition:none!important}}

@@ -40,11 +40,9 @@
     nav.style.setProperty('--lg-count',tabs.length);
     nav.style.setProperty('--lg-index',to);
     if (moved && !reduction.matches) {
-      const puck = nav.querySelector('.lg-nav-puck');
-      puck.getAnimations?.().forEach(animation => animation.cancel());
-      puck.animate?.([{transform:`translateX(${previous*100}%) scaleX(.98)`},{transform:`translateX(${to*100}%) scaleX(1)`}],{duration:390,easing:'cubic-bezier(.22,.88,.28,1.12)'});
       const page = app.querySelector('main.page');
-      page?.classList.add('lg-switch');
+      page?.getAnimations?.().forEach(animation=>animation.cancel());
+      page?.animate?.([{opacity:.82,transform:'translateY(3px)'},{opacity:1,transform:'translateY(0)'}],{duration:190,easing:'cubic-bezier(.2,.75,.3,1)'});
     }
     previous = to;
     previousTab = key;

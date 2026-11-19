@@ -168,7 +168,12 @@ const renderers = {home:renderHome,sources:renderSources,distributions:renderDis
 function render() {
   if (!session?.authenticated) return renderAuth();
   unmountBadges?.();unmountBadges=undefined;
-  app.innerHTML=`<header class="top"><div class="row spread">${brand()}<nav class="nav" aria-label="主导航">${Object.entries(tabs).map(([key,name])=>`<button type="button" data-act="nav" data-page="${key}"${page===key?' aria-current="page"':''}>${name}</button>`).join('')}</nav>${btn('退出','logout')}</div></header><main class="page stack" id="main">${renderers[page]()}</main>`;
+  if(!$('#main',app))app.innerHTML=`<header class="top"><div class="row spread">${brand()}<nav class="nav" aria-label="主导航">${Object.entries(tabs).map(([key,name])=>`<button type="button" data-act="nav" data-page="${key}">${name}</button>`).join('')}</nav>${btn('退出','logout')}</div></header><div class="lg-bottom-edge" aria-hidden="true"></div><main class="page stack" id="main"></main>`;
+  for(const tab of app.querySelectorAll('.nav > button[data-page]')){
+    if(tab.dataset.page===page){if(tab.getAttribute('aria-current')!=='page')tab.setAttribute('aria-current','page');}
+    else if(tab.hasAttribute('aria-current'))tab.removeAttribute('aria-current');
+  }
+  $('#main',app).innerHTML=renderers[page]();
   app.querySelectorAll('[data-filter]').forEach(filterLibrary);
   if(page==='badges')unmountBadges=window.RexBadges.attach($('[data-rex-badges]',app),{api,toast});
 }
