@@ -240,7 +240,7 @@ async function importPack(env,a) {
   const {data,targets} = compile(text,base || undefined), id = crypto.randomUUID();
   await lock(env,async t => {
     const {d,n} = await budget(env,'puts');
-    if (n<2) fail('今日徽章写入预算已用完，请在 UTC 日期变更后重试',429);
+    if (n<2) fail('今日徽章写入预算已用完，请于上海时间 08:00 配额重置后重试',429);
     const time = now();
     // Stage a tombstone before writing KV so a killed import can be cleaned up.
     await env.DB.batch([debit(env,t,d,2,0),sql(env,`INSERT INTO badge_packs

@@ -46,7 +46,7 @@ export function blockedRemoval(old,next){
   const gone=old.widgets.filter(m=>!keys.has(m.id)).length;
   return gone===old.widgets.length || (gone>=3 && gone*2>=old.widgets.length);
 }
-export function appendLog(st,message){st.logs.unshift({time:new Date().toISOString(),message});st.logs.length=Math.min(st.logs.length,60);}
+export function appendLog(st,message){st.logs.unshift({time:new Date().toISOString(),message});st.logs.length=Math.min(st.logs.length,200);}
 export function publishedConfig(d){const {published,publishedAt,active,publishedFiles,publishedRefs,publishWarning,...config}=d;return structuredClone(config);}
 export function recordPublish(d,next){
   d.published=next.manifest;d.publishedFiles=next.files;d.publishedRefs=next.refs;d.publishedAt=new Date().toISOString();d.publishWarning='';

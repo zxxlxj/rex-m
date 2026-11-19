@@ -223,3 +223,6 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 /* PWA: keep controls below the iPhone status bar and Dynamic Island. */
 #app .auth-screen{padding-top:calc(18px + env(safe-area-inset-top));padding-bottom:calc(18px + env(safe-area-inset-bottom));padding-inline:max(6px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-right));}
 @media(display-mode:standalone){html{overscroll-behavior-y:none}#app .startup{margin-top:calc(12dvh + env(safe-area-inset-top))}}
+
+#app .log-pager{justify-content:center;gap:12px;padding-block:2px}
+#app .log-page-label{min-width:3.3em;text-align:center;font-variant-numeric:tabular-nums;color:var(--lg-muted,var(--muted))}

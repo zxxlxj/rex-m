@@ -77,8 +77,13 @@ function deliverySelect(value,attrs,isModule=false) {
 function refreshSelect(value,attrs,isModule=false) {
   return field('刷新频率',`<select ${attrs}>${(isModule?[0,...refreshOptions]:refreshOptions).map(n=>`<option value="${n}"${selected(n===refreshValue(value,isModule))}>${n===0?'继承来源':n===1440?'24 小时':n>=60?`${n/60} 小时`:`${n} 分钟`}</option>`).join('')}</select>`);
 }
-function checkTime(date) {
-  return new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(date);
+const shanghaiTime = new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+function checkTime(value) {
+  if(value==null || value==='')return '—';
+  const date=new Date(value);
+  if(!Number.isFinite(date.getTime()))return '—';
+  const p=Object.fromEntries(shanghaiTime.formatToParts(date).map(({type,value})=>[type,value]));
+  return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}:${p.second}`;
 }
 function sourceCheck(s) {
   const last=Date.parse(s.checkedAt), due=last+sourceRefresh(s)*60_000;
@@ -133,7 +138,7 @@ function renderDistributions() {
     const path=d.key?paths(d):'', title=d.title||d.key||d.id;
     const mode=d.mode==='manual'?'手动选择':'规则筛选', status=d.enabled?'已启用':'已停用';
     const terms=[title,d.key,d.id,d.description,path,mode,status].join(' ');
-    const publication=Object.hasOwn(d,'published')?(d.publishedAt?`上次发布：${E(d.publishedAt)}`:'尚未发布'):'';
+    const publication=Object.hasOwn(d,'published')?(d.publishedAt?`上次发布：${E(checkTime(d.publishedAt))}`:'尚未发布'):'';
     return `<article class="dist-row" data-dist-item="${E(terms)}"><div class="dist-main"><img class="icon dist-icon" src="${E(image(d.icon))}" alt="" loading="lazy"><div class="dist-identity"><h3 class="wrap">${E(title)}</h3><div class="dist-meta"><span class="dist-status${d.enabled?' is-on':''}">${status}</span><span>${mode}</span>${publication&&!d.publishedAt?'<span>尚未发布</span>':''}</div></div><div class="dist-actions" aria-label="分发操作">${btn('编辑','edit-distribution',a)}${btn('预览','preview',a)}${btn('发布','publish',a,'primary')}</div></div>${d.publishWarning?`<small class="dist-warning wrap">自动发布暂停：${E(d.publishWarning)}</small>`:''}<details class="dist-more"><summary>链接与管理</summary><div class="dist-extra">${d.description?`<p class="wrap">${E(d.description)}</p>`:''}${path?`<a class="mono wrap" href="${E(path)}" target="_blank" rel="noopener noreferrer">${E(path)}</a>`:''}${publication?`<small class="wrap">${publication}</small>`:''}<div class="dist-actions">${path?btn('复制链接','copy',a):''}${btn(d.enabled?'停用':'启用','toggle-distribution',a)}${btn('删除','delete-distribution',a,'danger')}</div></div></details></article>`;
   }).join('');
   const count=state.distributions.length;
@@ -141,9 +146,17 @@ function renderDistributions() {
   return `<div class="dist-page stack">${hero('DELIVERY','分发管理','保存草稿后，可预览清单、手动发布并复制 REX 订阅链接。')}${panel('分发列表',content,btn('新建分发','edit-distribution','','primary'))}</div>`;
 }
 function logs(items) {
-  return items.map(l=>`<div class="log"><small class="mono wrap">${E(l.time)}</small><span class="wrap">${E(l.message)}</span></div>`).join('') || empty('暂无日志。');
+  return items.map(l=>`<div class="log"><small class="mono wrap">${E(checkTime(l.time))}</small><span class="wrap">${E(l.message)}</span></div>`).join('') || empty('暂无日志。');
 }
-function renderLogs() { return `<header class="library-head row spread"><h1>同步日志</h1>${btn('重新读取','reload')}</header><section class="glass pad activity-list">${logs(state.logs)}</section>`; }
+const LOG_PAGE_SIZE=50;
+let logPage=1;
+function renderLogs() {
+  const total=state.logs.length, pages=Math.max(1,Math.ceil(total/LOG_PAGE_SIZE));
+  logPage=Math.min(pages,Math.max(1,logPage));
+  const offset=(logPage-1)*LOG_PAGE_SIZE;
+  const pager=()=>`<nav class="log-pager row" aria-label="日志分页">${btn('上一页','log-page',`data-log-page="${logPage-1}"${logPage===1?' disabled':''}`)}<span class="log-page-label" role="status">${logPage} / ${pages}</span>${btn('下一页','log-page',`data-log-page="${logPage+1}"${logPage===pages?' disabled':''}`)}</nav>`;
+  return `<header class="library-head row spread"><div><h1>同步日志</h1><small>${total} 条 · 上海时间</small></div>${btn('刷新','reload')}</header>${pages>1?pager():''}<section class="glass pad activity-list">${logs(state.logs.slice(offset,offset+LOG_PAGE_SIZE))}</section>${pages>1?pager():''}`;
+}
 function renderSettings() {
   const {defaultIcon,defaultDelivery,defaultRefreshMinutes,defaultNewPolicy}=state.settings;
   const defaultsForm=`<form class="stack" data-form="settings"><div class="library-fields">${deliverySelect(defaultDelivery,'name="defaultDelivery"')}${refreshSelect(defaultRefreshMinutes,'name="defaultRefreshMinutes"')}${policySelect(defaultNewPolicy,'name="defaultNewPolicy"')}</div><div class="row"><img class="icon" src="${E(image(defaultIcon))}" alt=""><small>默认分发图标</small></div>${iconFields(defaultIcon)}${formError()}<div class="row">${submit('保存默认设置')}</div></form>`;
@@ -397,7 +410,8 @@ const actions={
   import(){importForm();},
   close(){dialog.close();},
   async sync(b){const {id,module}=b.dataset;await save('sync',id?{id,...(module?{moduleId:module}:{})}:{},'检查完成。');},
-  async reload(){await load();render();toast('日志已刷新。');},
+  async reload(){await load();logPage=1;render();toast('日志已刷新。');},
+  'log-page'(b){logPage=Number(b.dataset.logPage)||1;go('logs');},
   'edit-category'(_,id){categoryForm(state.categories.find(c=>c.id===id));},
   'delete-category'(_,id){const c=state.categories.find(x=>x.id===id);if(c)ask('删除分类',`确定删除「${c.name}」？请检查引用此分类的分发规则。`,'delete-category-confirm',id);},
   'delete-category-confirm'(_,id){return save('category',{id,delete:true},'分类已删除。');},
@@ -443,7 +457,7 @@ function asyncAction(work,scope){
 document.addEventListener('click',event=>{
   const b=event.target.closest?.('button[data-act]'); if(!b||busy)return;
   const {act,id}=b.dataset;
-  if(['nav','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module'].includes(act)){
+  if(['nav','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module'].includes(act)){
     actions[act](b,id,state.distributions.find(d=>d.id===id));return;
   }
   if(act==='retry'){asyncAction(()=>boot());return;}

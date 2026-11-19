@@ -3,7 +3,7 @@
 **当前版本：`0.0.2`**
 
 > [!WARNING]
-> **部署前看免费额度，避免超支。** Workers Free：每账号 **100,000 次 Worker 请求/日**（UTC 午夜重置），每次调用最多 **50 个子请求、10 ms CPU**。Workers KV Free：每天 **100,000 次读取、1,000 次写入、1,000 次删除、1,000 次列表操作**，存储 **1 GB**。这些不是每套 Rex Hub 单独拥有的额度；模块、徽章图片、PWA 访问和账号的其他项目会消耗相应配额。`pppboom-adult.json` 含 1,556 条图片规则，大包首次托管可能跨日。免费方案到限额时请求可能失败；如果账号是付费方案，超出包含量可能计费。建议先用上游直链、降低检查频率，并在 Cloudflare 控制台查看用量，别把应用内批次当成账单上限。[Workers 限额](https://developers.cloudflare.com/workers/platform/limits/) · [KV 定价和免费额度](https://developers.cloudflare.com/kv/platform/pricing/)
+> **部署前看免费额度，避免超支。** Workers Free：每账号 **100,000 次 Worker 请求/日**（上海时间每日 08:00 重置，即 UTC 午夜），每次调用最多 **50 个子请求、10 ms CPU**。Workers KV Free：每天 **100,000 次读取、1,000 次写入、1,000 次删除、1,000 次列表操作**，存储 **1 GB**。这些不是每套 Rex Hub 单独拥有的额度；模块、徽章图片、PWA 访问和账号的其他项目会消耗相应配额。`pppboom-adult.json` 含 1,556 条图片规则，大包首次托管可能跨日。免费方案到限额时请求可能失败；如果账号是付费方案，超出包含量可能计费。建议先用上游直链、降低检查频率，并在 Cloudflare 控制台查看用量，别把应用内批次当成账单上限。[Workers 限额](https://developers.cloudflare.com/workers/platform/limits/) · [KV 定价和免费额度](https://developers.cloudflare.com/kv/platform/pricing/)
 
 把多个 Rex 模块或 `.rex` 合集拆开、重新分类，再生成一个或多个固定分发链接。支持上传文件、上游直链或下载托管、按来源和模块设刷新间隔、发布预览，以及在后台修改管理员密码。
 
@@ -50,6 +50,10 @@ npx wrangler secret put SETUP_TOKEN
 ```
 
 最后用 `wrangler secret put` 交互输入自己生成的令牌。若使用自定义域名，建议在**第一次导入前**设置 Worker 变量 `PUBLIC_ORIGIN` 为该域名的 HTTPS 源站地址（不带路径）。Cloudflare 用量和收费以你的账号方案及配额为准。
+
+## 时间与日志
+
+后台时间统一显示为上海时间（UTC+8）。同步日志保留最新 200 条，每页 50 条。Cloudflare 的配额仍按其官方重置时间计算。
 
 ## 安装到 iPhone 主屏幕
 
