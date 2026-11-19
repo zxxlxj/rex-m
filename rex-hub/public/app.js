@@ -11,7 +11,8 @@ const defaultSettings = {defaultRefreshMinutes:30,defaultDelivery:'link',default
 const blank = () => ({sources:[],categories:[],distributions:[],logs:[],settings:{...defaultSettings}});
 let session, state = blank(), page = 'home', busy = false, timer, returnFocus;
 const expanded = new Set(), openSettings = new Set(), openModules = new Set(), moduleSearch = new Map();
-let sourceSearch = '';
+const selectedSources = new Set(), batchDeleteSources = new WeakMap();
+let sourceSearch = '', selectingSources = false;
 const tabs = {home:'概览',sources:'来源',distributions:'分发',badges:'徽章',logs:'日志',settings:'设置'};
 let unmountBadges;
 const format = x => JSON.stringify(x, null, 2) ?? '—';
@@ -51,6 +52,7 @@ function toggle(title, name, value, attrs='') { return `<label class="toggle"><i
 function categorySelect(current, attrs='', placeholder='未分类') { return `<select ${attrs}><option value="">${E(placeholder)}</option>${state.categories.map(c=>`<option value="${E(c.id)}"${selected(c.id===current)}>${E(c.name)}</option>`).join('')}</select>`; }
 function formError() { return '<p class="error" data-error role="alert"></p>'; }
 function renderAuth() {
+  selectingSources=false;selectedSources.clear();
   unmountBadges?.();unmountBadges=undefined;
   const setup = !session.initialized;
   app.innerHTML = `<main class="auth-screen"><section class="auth glass pad stack">${brand()}<header><span class="eyebrow">${setup?'FIRST RUN':'WELCOME BACK'}</span><h1>${setup?'初始化控制台':'欢迎回来'}</h1><p>${setup?'输入部署时配置的初始化令牌，并为控制台设置密码。':'使用管理密码登录，管理 REX 来源与分发。'}</p></header><form class="stack" data-form="${setup?'setup':'login'}">${setup?field('初始化令牌',input('token','','type="password" required autocomplete="off"')):''}${field('管理密码',input('password','',`type="password" required autocomplete="${setup?'new-password':'current-password'}"`))}${formError()}${submit(setup?'初始化':'登录控制台')}</form></section></main>`;
@@ -64,7 +66,7 @@ function renderHome() {
 const refreshOptions=[5,15,30,60,180,360,720,1440];
 const refreshValue=(value,isModule=false)=>refreshOptions.includes(Number(value))?Number(value):(isModule?0:30);
 const deliveryValue=(value,isModule=false)=>value==='mirror'||value==='link'?value:(isModule?'inherit':'link');
-const sourceDelivery=s=>deliveryValue(s.delivery);
+const sourceDelivery=s=>deliveryValue(s.delivery??state.settings.defaultDelivery);
 const sourceRefresh=s=>refreshValue(s.refreshMinutes);
 const sourcePolicy=s=>s.newPolicy==='auto'?'auto':'review';
 function policySelect(value,attrs) {
@@ -100,7 +102,29 @@ function mirrorStatus(m) {
   const hash=mirror.hash?`<span title="${E(mirror.hash)}">哈希 ${E(String(mirror.hash).slice(0,12))}</span>`:'';
   return `<div class="library-mirror wrap"><small>${ready?`<a href="${E(mirror.url)}" target="_blank" rel="noopener noreferrer">托管文件</a>`:mirror.error?'托管未就绪':'等待下载'}${version?` · ${E(version)}`:''}${hash?` · ${hash}`:''} · 上次检查：${Number.isFinite(last)?E(checkTime(last)):'—'}</small>${mirror.remoteUrl&&mirror.remoteUrl!==m.url?`<small>上次检查地址：${E(mirror.remoteUrl)}</small>`:''}${mirror.error?`<small class="error">托管刷新失败：${E(mirror.error)}</small>`:''}</div>`;
 }
+function sourceMirrorEnabled(s,m){
+  const delivery=deliveryValue(m.delivery,true);
+  return delivery==='mirror'||delivery==='inherit'&&sourceDelivery(s)==='mirror';
+}
+function sourceCheckUnavailable(s){
+  if(s.paused)return '来源已暂停刷新';
+  if(s.url||(s.modules||[]).some(m=>m.url&&!isLocalModule(s,m)&&!m.paused&&!m.pending&&sourceMirrorEnabled(s,m)))return '';
+  return '没有可检查的远程地址';
+}
+function sourceIcon(s){
+  let hash=2166136261;
+  for(const ch of String(s.id))hash=Math.imul(hash^ch.codePointAt(0),16777619);
+  const fallback=`/rex-dino-${String((hash>>>0)%24+1).padStart(2,'0')}.png`;
+  const first=(s.modules||[]).find(m=>!m.removed);
+  const icon=image(s.icon?.trim?.()||first?.icon?.trim?.());
+  return `<span class="library-glyph" aria-hidden="true"><img src="${E(icon===mark?fallback:icon)}" data-source-icon="${fallback}" alt="" loading="lazy" width="35" height="35"></span>`;
+}
+function sourceBatchToolbar(){
+  return `<div class="library-batch row" id="source-batch" role="group" aria-label="批量操作"${selectingSources?'':' hidden'}><small data-source-selection-count role="status"></small>${btn('全选可见','source-select-visible','disabled')}${btn('清空','source-select-clear','disabled')}${btn('批量检查','source-batch-check','disabled')}${btn('批量删除','source-batch-delete','disabled','danger')}</div>`;
+}
 function renderSources() {
+  const ids=new Set(state.sources.map(s=>s.id));
+  for(const id of selectedSources)if(!ids.has(id))selectedSources.delete(id);
   const rows=state.sources.map(s=>{
     const a=`data-id="${E(s.id)}"`, modules=s.modules||[];
     const pending=modules.filter(m=>m.pending).length;
@@ -108,8 +132,10 @@ function renderSources() {
     const host=s.url?new URL(s.url).hostname:'本地上传';
     const detailFlags=s.paused?'已暂停':pending?`${pending} 待审核`:'';
     const canMirror=modules.some(m=>!isLocalModule(s,m));
-    const onlineSettings=s.url?`${deliverySelect(sourceDelivery(s),`data-change="source-delivery" ${a}`)}${refreshSelect(sourceRefresh(s),`data-change="source-refresh" ${a}`)}${policySelect(sourcePolicy(s),`data-change="source-policy" ${a}`)}${field('新增模块分类',categorySelect(s.newCategoryId,`data-change="source-new-category" ${a}`,'继承来源分类'))}${toggle('暂停刷新','',s.paused,`data-change="source-paused" ${a}`)}`:'';
-    const options=`<details class="library-options" data-source-settings="${E(s.id)}"${openSettings.has(s.id)?' open':''}><summary>来源设置 <i class="chevron"></i></summary><div class="library-settings">${s.url?`<small class="wrap">${E(s.url)}${typeof s.status==='string'&&s.status!=='正常'?` · ${E(s.status)}`:''}</small><small class="wrap">${E(sourceCheck(s))}</small>`:''}<div class="library-fields">${field('默认分类',categorySelect(s.categoryId,`data-change="source-category" ${a}`))}${onlineSettings}${!s.url&&canMirror?deliverySelect(sourceDelivery(s),`data-change="source-delivery" ${a}`)+refreshSelect(sourceRefresh(s),`data-change="source-refresh" ${a}`):''}</div><div class="row">${(s.url||canMirror)&&!s.paused?btn('立即检查','sync',a):''}${!s.url?btn('重新上传','replace-source',a):''}${btn('删除来源','delete-source',a,'danger')}</div></div></details>`;
+    const checkUnavailable=sourceCheckUnavailable(s);
+    const checkLabel=`检查来源：${label(s)}${checkUnavailable?`（${checkUnavailable}）`:''}`;
+    const onlineSettings=s.url?`${deliverySelect(sourceDelivery(s),`data-change="source-delivery" ${a}`)}${refreshSelect(sourceRefresh(s),`data-change="source-refresh" ${a}`)}${policySelect(sourcePolicy(s),`data-change="source-policy" ${a}`)}${field('新增模块分类',categorySelect(s.newCategoryId,`data-change="source-new-category" ${a}`, '继承来源分类'))}${toggle('暂停刷新','',s.paused,`data-change="source-paused" ${a}`)}`:'';
+    const options=`<details class="library-options" data-source-settings="${E(s.id)}"${openSettings.has(s.id)?' open':''}><summary>来源设置 <i class="chevron"></i></summary><div class="library-settings">${s.url?`<small class="wrap">${E(s.url)}${typeof s.status==='string'&&s.status!=='正常'?` · ${E(s.status)}`:''}</small><small class="wrap">${E(sourceCheck(s))}</small>`:''}<div class="library-fields">${field('默认分类',categorySelect(s.categoryId,`data-change="source-category" ${a}`))}${onlineSettings}${!s.url&&canMirror?deliverySelect(sourceDelivery(s),`data-change="source-delivery" ${a}`)+refreshSelect(sourceRefresh(s),`data-change="source-refresh" ${a}`):''}</div><div class="row">${!s.url?btn('重新上传','replace-source',a):''}${btn('删除来源','delete-source',a,'danger')}</div></div></details>`;
     const items=modules.map(m=>{
       const r=`data-id="${E(m.id)}" data-source="${E(s.id)}"`, key=`${s.id}:${m.id}`;
       const cat=state.categories.find(c=>c.id===(m.categoryId||s.categoryId))?.name;
@@ -120,9 +146,10 @@ function renderSources() {
       const meta=[m.version?`v${m.version}`:'',cat,mirrored?(m.mirror?.url?'下载托管':'托管未就绪'):'',m.pending?'待审核':'',m.removed?'上游已移除':'',m.disabled?'已禁用':'',m.paused?'已暂停':''].filter(Boolean).join(' · ');
       return `<details class="library-module" name="modules-${E(s.id)}" data-module="${E(key)}" data-search="${E(`${m.title||''} ${m.id} ${cat||''} ${meta}`.toLowerCase())}"${openModules.has(key)?' open':''}><summary><span class="library-text"><strong>${E(m.title||m.id)}</strong><small>${E(meta||m.id)}</small></span><i class="chevron"></i></summary><div class="library-module-body"><small class="wrap mono">${E(m.id)}${m.url?` · ${E(m.url)}`:''}</small>${mirrored?mirrorStatus(m):''}<div class="library-fields">${field('模块分类',categorySelect(m.categoryId,`data-change="module-category" ${r}`,'继承来源分类'))}${deliverySettings}<div class="row">${toggle('暂停刷新','',m.paused,`data-change="module-paused" ${r}`)}${toggle('禁用','',m.disabled,`data-change="module-disabled" ${r}`)}</div></div>${mirrorAction}${m.pending?btn('审核通过','approve-module',r,'primary'):''}</div></details>`;
     }).join('');
-    return `<details class="library-source" name="rex-library-source" ${a} data-search="${E(`${label(s)} ${host} ${category||''}`.toLowerCase())}"${expanded.has(s.id)?' open':''}><summary><span class="library-glyph" aria-hidden="true">${s.url?'↗':'↓'}</span><span class="library-text"><strong>${E(label(s))}</strong><small>${E([host,category,detailFlags].filter(Boolean).join(' · '))}</small></span><span class="library-count" aria-label="${modules.length} 个模块">${modules.length}</span><i class="chevron"></i></summary><div class="library-body">${options}${modules.length>=6?`<input class="library-search" data-filter="modules" type="search" placeholder="搜索模块" aria-label="搜索模块" value="${E(moduleSearch.get(s.id)||'')}">`:''}<div class="library-modules">${items||empty('暂无模块')}<p class="empty" data-no-match hidden>无匹配模块</p></div></div></details>`;
+    return `<div class="library-source-row" ${a} data-search="${E(`${label(s)} ${host} ${category||''}`.toLowerCase())}"><details class="library-source" name="rex-library-source" ${a}${expanded.has(s.id)?' open':''}><summary>${sourceIcon(s)}<span class="library-text"><strong>${E(label(s))}</strong><small>${E([host,category,detailFlags].filter(Boolean).join(' · '))}</small></span><span class="library-count" aria-label="${modules.length} 个模块">${modules.length}</span><i class="chevron" aria-hidden="true"></i></summary><div class="library-body">${options}${modules.length>=6?`<input class="library-search" data-filter="modules" type="search" placeholder="搜索模块" aria-label="搜索模块" value="${E(moduleSearch.get(s.id)||'')}">`:''}<div class="library-modules">${items||empty('暂无模块')}<p class="empty" data-no-match hidden>无匹配模块</p></div></div></details><label class="library-source-select"${selectingSources?'':' hidden'}><input type="checkbox" data-change="source-select" ${a} aria-label="${E(`选择来源：${label(s)}`)}"${checked(selectedSources.has(s.id))}></label>${btn('检查','sync',`${a} aria-label="${E(checkLabel)}"${checkUnavailable?` disabled title="${E(checkUnavailable)}"`:''}`,'library-source-check')}</div>`;
   }).join('');
-  return `<header class="library-head row spread"><h1>来源</h1><div class="row">${btn('检查到期来源','sync')}${btn('＋ 导入','import','','primary')}</div></header><section class="glass library-panel">${state.sources.length>=5?`<input class="library-search" data-filter="sources" type="search" placeholder="搜索来源" aria-label="搜索来源" value="${E(sourceSearch)}">`:''}<div class="library-sources">${rows||empty('暂无来源')}<p class="empty" data-no-match hidden>无匹配来源</p></div></section>`;
+  const multiselect=`<button type="button" class="btn library-multiselect" data-act="source-multiselect" aria-label="批量选择来源" title="批量选择来源" aria-controls="source-batch" aria-pressed="${selectingSources}"${state.sources.length?'':' disabled'}><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m7.5 12 3 3 6-6"/></svg></button>`;
+  return `<header class="library-head row spread"><h1>来源</h1><div class="row">${multiselect}${btn('检查到期来源','sync')}${btn('＋ 导入','import','','primary')}</div></header><section class="glass library-panel">${state.sources.length>=5||sourceSearch?`<input class="library-search" data-filter="sources" type="search" placeholder="搜索来源" aria-label="搜索来源" value="${E(sourceSearch)}">`:''}${sourceBatchToolbar()}<div class="library-sources">${rows||empty('暂无来源')}<p class="empty" data-no-match hidden>无匹配来源</p></div></section>`;
 }
 function filterLibrary(el){
   const modules=el.dataset.filter==='modules', scope=modules?el.closest('.library-source'):el.closest('.library-panel');
@@ -130,7 +157,36 @@ function filterLibrary(el){
   const query=el.value.trim().toLowerCase();let count=0;
   if(modules)moduleSearch.set(scope.dataset.id,el.value);else sourceSearch=el.value;
   for(const row of list.children)if(row.dataset.search!==undefined){row.hidden=!row.dataset.search.includes(query);if(!row.hidden)count++;}
-  const empty=list.querySelector(':scope > [data-no-match]');if(empty)empty.hidden=!query||count>0;
+  const noMatch=list.querySelector(':scope > [data-no-match]');if(noMatch)noMatch.hidden=!query||count>0;
+  if(!modules)refreshSourceSelection();
+}
+function sourceRows(){return app.querySelectorAll('.library-sources > .library-source-row');}
+function selectedSourceRows(){return state.sources.filter(s=>selectedSources.has(s.id));}
+function refreshSourceSelection(){
+  const toolbar=$('#source-batch',app), toggle=$('[data-act="source-multiselect"]',app);
+  if(!toolbar||!toggle)return;
+  const rows=[...sourceRows()], chosen=selectedSourceRows();
+  const hiddenCount=rows.filter(row=>row.hidden&&selectedSources.has(row.dataset.id)).length;
+  const checkableCount=chosen.filter(s=>!sourceCheckUnavailable(s)).length;
+  toolbar.hidden=!selectingSources;
+  toggle.setAttribute('aria-pressed',String(selectingSources));
+  $('.library-sources',app).classList.toggle('is-selecting',selectingSources);
+  for(const row of rows){
+    const checkbox=$('[data-change="source-select"]',row);
+    checkbox.parentElement.hidden=!selectingSources;
+    checkbox.checked=selectedSources.has(row.dataset.id);
+    checkbox.disabled=busy;
+  }
+  $('[data-source-selection-count]',toolbar).textContent=`已选 ${chosen.length} 项${hiddenCount?` · ${hiddenCount} 项不在当前结果`:''}`;
+  for(const [act,disabled] of [
+    ['source-select-visible',!rows.some(row=>!row.hidden&&!selectedSources.has(row.dataset.id))],
+    ['source-select-clear',!chosen.length],
+    ['source-batch-check',!checkableCount],
+    ['source-batch-delete',!chosen.length]
+  ])$(`[data-act="${act}"]`,toolbar).disabled=busy||disabled;
+  const check=$('[data-act="source-batch-check"]',toolbar);
+  check.textContent=`批量检查${checkableCount?`（${checkableCount}）`:''}`;
+  check.title='仅检查已选的可用远程来源；跳过已暂停和无远程地址的来源';
 }
 function renderDistributions() {
   const rows=state.distributions.map(d=>{
@@ -175,6 +231,7 @@ function render() {
   }
   $('#main',app).innerHTML=renderers[page]();
   app.querySelectorAll('[data-filter]').forEach(filterLibrary);
+  if(page==='sources')refreshSourceSelection();
   if(page==='badges')unmountBadges=window.RexBadges.attach($('[data-rex-badges]',app),{api,toast});
 }
 function go(target) { if (!Object.hasOwn(tabs,target)) return; page=target; render(); window.scrollTo(0,0); const h=$('main h1'); h.tabIndex=-1; h.focus({preventScroll:true}); }
@@ -336,9 +393,9 @@ const forms={
     for(const key of ['baseUrl','categoryId']) if(text(fd,key))data[key]=text(fd,key);
     const metadata=Object.fromEntries(['id','title','version','requiredVersion','author','icon'].map(k=>[k,text(fd,k)]).filter(([,v])=>v));
     if(Object.keys(metadata).length)data.metadata=metadata;
-    await save('source',data,'已导入到来源，未发布。','sources');
+    await save('source',data,'已导入。','sources');
   },
-  async approve(fd,form){const {id,source}=form.dataset;await save('module/update',{id,sourceId:source,approve:true,categoryId:text(fd,'categoryId')},'审核通过，尚未发布。');},
+  async approve(fd,form){const {id,source}=form.dataset;await save('module/update',{id,sourceId:source,approve:true,categoryId:text(fd,'categoryId')},'审核通过。');},
   async category(fd,form){const id=form.dataset.id; await save('category',{...(id?{id}:{}),name:text(fd,'name')},'分类已保存。');},
   async distribution(fd,form,intent){
     const publish=intent!=='draft', confirm=publish&&intent==='confirm';
@@ -390,6 +447,7 @@ function setBusy(value){
   document.body.toggleAttribute('aria-busy',value);
   if(value) for(const b of document.querySelectorAll('button:enabled')) {b.dataset.busy='1';b.disabled=true;}
   else for(const b of document.querySelectorAll('[data-busy]')) {delete b.dataset.busy;b.disabled=false;}
+  if(page==='sources')refreshSourceSelection();
 }
 function ask(title, message, act, id, button=title, danger=true){
   showDialog(title,`<p class="wrap">${E(message)}</p>${formError()}<div class="row">${btn('取消','close')}${btn(button,act,`data-id="${E(id)}"`,danger?'danger':'primary')}</div>`);
@@ -411,7 +469,41 @@ async function copy(value){
   showDialog('复制分发链接',`<p>浏览器没有授予剪贴板访问权限。可长按或选中文字复制。</p>${field('完整链接',input('copy-link',value,'readonly autofocus'))}`);
   $('[name="copy-link"]',dialog).select();
 }
+async function submitSourceBatch(action, ids){
+  const result=await api('source/batch',{ids,action});
+  if(dialog.open)dialog.close();
+  if(action==='delete')for(const id of ids)selectedSources.delete(id);
+  try{await load();}catch(e){throw Error(`操作已提交，但刷新状态失败：${errorText(e)}`);}
+  render();
+  if(action==='delete'){
+    $('[data-act="source-multiselect"]:enabled',app)?.focus({preventScroll:true});
+    toast(`已删除 ${result?.deleted??ids.length} 个来源${result?.cleanupPending?'，剩余文件将分批清理':''}。`);
+  }else{
+    $('[data-act="source-batch-check"]:enabled',app)?.focus({preventScroll:true});
+    const parts=[`本次已检查 ${result?.checked??0} 项`];
+    if(result?.failed)parts.push(`${result.failed} 项失败`);
+    if(result?.queued)parts.push(`队列剩余 ${result.queued} 项`);
+    if(result?.skipped)parts.push(`跳过 ${result.skipped} 项`);
+    toast(parts.join('，')+'。');
+  }
+}
 const actions={
+  'source-multiselect'(){
+    selectingSources=!selectingSources;
+    if(!selectingSources)selectedSources.clear();
+    refreshSourceSelection();
+  },
+  'source-select-visible'(){for(const row of sourceRows())if(!row.hidden)selectedSources.add(row.dataset.id);refreshSourceSelection();},
+  'source-select-clear'(){selectedSources.clear();refreshSourceSelection();},
+  'source-batch-delete'(){
+    const chosen=selectedSourceRows();if(!chosen.length)return;
+    const hidden=[...sourceRows()].filter(row=>row.hidden&&selectedSources.has(row.dataset.id)).length;
+    const names=chosen.slice(0,5).map(s=>`<li>${E(label(s))}</li>`).join('');
+    showDialog('批量删除来源',`<p class="wrap">确定删除 ${chosen.length} 个来源${hidden?`（含 ${hidden} 个不在当前筛选结果）`:''}？它们的模块将从分发撤下，未被其他来源使用的托管文件将被清理。</p><ul class="library-delete-list wrap">${names}${chosen.length>5?`<li>另有 ${chosen.length-5} 个来源</li>`:''}</ul>${formError()}<div class="row">${btn('取消','close')}${btn(`删除 ${chosen.length} 个来源`,'source-batch-delete-confirm','','danger')}</div>`);
+    batchDeleteSources.set($('[data-act="source-batch-delete-confirm"]',dialog),chosen.map(s=>s.id));
+  },
+  'source-batch-delete-confirm'(b){const ids=batchDeleteSources.get(b);if(ids?.length)return submitSourceBatch('delete',ids);},
+  'source-batch-check'(){const rows=selectedSourceRows();if(rows.some(s=>!sourceCheckUnavailable(s)))return submitSourceBatch('check',rows.map(s=>s.id));},
   nav(b){go(b.dataset.page);},
   async logout(){await api('logout',{}); session.authenticated=false; state=blank();page='home';expanded.clear();renderAuth();},
   import(){importForm();},
@@ -428,7 +520,7 @@ const actions={
     const sourceId=b.dataset.source,s=state.sources.find(x=>x.id===sourceId),m=s?.modules?.find(x=>x.id===id&&x.pending);
     if(!m)return;
     expanded.add(sourceId);
-    showDialog('审核通过',`<form class="stack" data-form="approve" data-id="${E(id)}" data-source="${E(sourceId)}"><p class="wrap">「${E(m.title||m.id)}」审核通过后可纳入分发。此操作不会立即发布。</p>${field('模块分类',categorySelect(m.categoryId,'name="categoryId"','继承来源分类'))}${formError()}${submit('确认通过')}</form>`);
+    showDialog('审核通过',`<form class="stack" data-form="approve" data-id="${E(id)}" data-source="${E(sourceId)}"><p class="wrap">「${E(m.title||m.id)}」审核通过后，符合规则的分发将自动更新。</p>${field('模块分类',categorySelect(m.categoryId,'name="categoryId"','继承来源分类'))}${formError()}${submit('确认通过')}</form>`);
   },
   'delete-source-confirm'(_,id){return save('source/update',{id,delete:true},'来源已删除。');},
   'edit-distribution'(_,id,d){distributionForm(d);},
@@ -464,7 +556,7 @@ function asyncAction(work,scope){
 document.addEventListener('click',event=>{
   const b=event.target.closest?.('button[data-act]'); if(!b||busy)return;
   const {act,id}=b.dataset;
-  if(['nav','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module'].includes(act)){
+  if(['nav','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module','source-multiselect','source-select-visible','source-select-clear','source-batch-delete'].includes(act)){
     actions[act](b,id,state.distributions.find(d=>d.id===id));return;
   }
   if(act==='retry'){asyncAction(()=>boot());return;}
@@ -494,6 +586,13 @@ function clearPublishConfirmation(event){
 }
 dialog.addEventListener('input',clearPublishConfirmation);
 dialog.addEventListener('change',clearPublishConfirmation);
+app.addEventListener('error',event=>{
+  const img=event.target;
+  if(!img.matches?.('img[data-source-icon]'))return;
+  const fallback=img.dataset.sourceIcon, current=img.getAttribute('src');
+  if(current===mark){img.hidden=true;return;}
+  img.src=current===fallback?mark:fallback;
+},true);
 app.addEventListener('input',event=>{if(event.target.dataset.filter)filterLibrary(event.target);});
 app.addEventListener('toggle',event=>{
   const el=event.target;
@@ -506,6 +605,10 @@ document.addEventListener('change',event=>{
   const el=event.target;
   const {change,id,source}=el.dataset;
   if(!change)return;
+  if(change==='source-select'){
+    if(!busy&&selectingSources){if(el.checked)selectedSources.add(id);else selectedSources.delete(id);}
+    refreshSourceSelection();return;
+  }
   if(change==='import-method') {
     for(const part of dialog.querySelectorAll('[data-import]')){
       part.hidden=part.dataset.import!==el.value;

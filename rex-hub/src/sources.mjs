@@ -176,8 +176,9 @@ function indexData(payload) {
   if (!object(index) || !own(index, 'widgets') || !Array.isArray(index.widgets)) fail('合集必须包含 widgets 数组（允许为空）', 422);
   if (index.widgets.length > MAX_ITEMS) fail(`每个来源最多 ${MAX_ITEMS} 个模块`, 413);
   const label = text(index.title ?? index.name, 160, '合集标题');
-  return { rows: index.widgets, label };
+  return { rows: index.widgets, label, icon: index.icon || index.logo || index.iconURL || '' };
 }
+function sourceIcon(value,base){try{return value?publishUrl(value,base,false):'';}catch{return '';}}
 function assertRow(row) {
   if (!object(row) || own(row, 'widgets')) fail('合集条目无效或含嵌套索引', 422);
   return text(row.url, 2048, '合集模块网址', true);
@@ -192,16 +193,16 @@ function unique(modules) {
 }
 function parseOnline(payload, source, effective, manual) {
   if (/\.(?:rex|json)\/?$/i.test(decodeURIComponent(new URL(effective).pathname)) || /\.(?:rex|json)\/?$/i.test(decodeURIComponent(new URL(source).pathname)) || /^[\s\uFEFF]*[\[{]/.test(payload)) {
-    const { rows, label } = indexData(payload);
+    const { rows, label, icon } = indexData(payload);
     const modules = unique(rows.map(row => {
       const url = publishUrl(assertRow(row), effective, true);
       if (url === effective || url === source) fail('合集不能引用自身', 422);
       return moduleOf(moduleMeta(row, effective), url);
     }));
-    return { modules, label, kind: 'online-index' };
+    return { modules, label, icon:sourceIcon(icon,effective), kind: 'online-index' };
   }
   const meta = jsMeta(payload, effective, manual);
-  return { modules: [moduleOf(meta, effective)], label: meta.title, kind: 'online-module' };
+  return { modules: [moduleOf(meta, effective)], label: meta.title, icon:meta.icon, kind: 'online-module' };
 }
 
 function importFiles(files) {
@@ -263,10 +264,11 @@ async function parseUpload(input, env, origin) {
     stored.set(path.slice(1), file.bytes);
     return moduleOf(meta, localOrigin + path);
   }
-  const modules = []; let label;
+  const modules = []; let label, icon;
   if (indexes.length) {
     const index = indexData(indexes[0].payload);
     label = index.label || indexes[0].name;
+    icon=sourceIcon(index.icon,base);
     const byName = new Map(js.map(f => [f.name, f]));
     for (const row of index.rows) {
       const spec = assertRow(row);
@@ -296,7 +298,7 @@ async function parseUpload(input, env, origin) {
     try { for (const [key, bytes] of stored) await env.FILES.put(key, bytes, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=86400, immutable' } }); }
     catch { fail('无法保存上传文件', 503); }
   }
-  return { modules, label, kind: indexes.length ? 'upload-index' : 'upload-modules' };
+  return { modules, label, icon:icon||modules[0]?.icon||'', kind: indexes.length ? 'upload-index' : 'upload-modules' };
 }
 
 const now = () => new Date().toISOString();
@@ -338,11 +340,11 @@ function reconcile(previous, incoming) {
 export async function refresh(source, env, _origin) {
   if (source.paused || !source.url) return source;
   const u = sourceUrl(source.url);
-  const result = await fetchSource(u, source);
+  const result = await fetchSource(u, Object.hasOwn(source,'icon')?source:undefined);
   const { effectiveUrl, etag, lastModified } = result;
   const info = { checkedAt: now(), effectiveUrl, etag, lastModified, status: '正常' };
   if (result.unchanged) return { ...source, ...info };
   const parsed = parseOnline(result.payload, u.href, effectiveUrl, source.manualMetadata || {});
   if (source.kind && source.kind !== parsed.kind) fail('来源内容类型已变化，需重新导入', 422);
-  return { ...source, ...info, kind: parsed.kind, ...reconcile(source, parsed.modules) };
+  return { ...source, ...info, kind: parsed.kind, icon:parsed.icon, ...reconcile(source, parsed.modules) };
 }

@@ -51,11 +51,11 @@ export function publishedConfig(d){const {published,publishedAt,active,published
 export function recordPublish(d,next){
   d.published=next.manifest;d.publishedFiles=next.files;d.publishedRefs=next.refs;d.publishedAt=new Date().toISOString();d.publishWarning='';
 }
-export function republish(st,origin){
+export function republish(st,origin,{allowRemoval=false}={}){
   for(const d of st.distributions){
     if(!d.enabled||!d.active)continue;
     const next=build(st,d.active,origin);
-    if(next.blocked.length || next.missingMirrors.length || blockedRemoval(d.published,next.manifest)){
+    if(next.blocked.length || next.missingMirrors.length || (!allowRemoval&&blockedRemoval(d.published,next.manifest))){
       const reason=next.blocked.length?'模块 ID 冲突':next.missingMirrors.length?'等待托管模块首次下载':'异常批量移除';
       if(d.publishWarning!==reason)appendLog(st,`「${d.active.title}」暂停自动发布：${reason}`);
       d.publishWarning=reason;continue;

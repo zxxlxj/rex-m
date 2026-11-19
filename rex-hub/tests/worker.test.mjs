@@ -108,3 +108,25 @@ test('deleting a source withdraws published widgets and removes only unshared ho
  await req('/api/source/update',{id:b.id,delete:true});
  assert.equal(storage.size,0);assert.ok(deleted.includes(path.slice(1)));await req(path,undefined,404);
 });
+
+test('matching imports, batch checks and batch deletion update published rules without extra publish',async t=>{
+ const orig=globalThis.fetch;t.after(()=>{globalThis.fetch=orig;});
+ let version='1.0.0';
+ globalThis.fetch=async u=>new Response(js.replace('test.alpha',`test.${new URL(u).pathname.slice(1,-3)}`).replace('1.0.0',version));
+ const req=fixture(t);await req('/api/setup',{token:secret,password:'A long test password!'},201);
+ await req('/api/category',{name:'自动分发'});const categoryId=(await req('/api/state')).parse().categories[0].id;
+ await req('/api/distribution',{...settings,key:'auto-hub',categoryIds:[categoryId],publish:true,confirmEmpty:true});
+ const local=(await req('/api/source',{categoryId,files:[{name:'local.js',text:js}]},201)).parse().source;
+ assert.deepEqual((await req('/s/auto-hub.rex')).parse().widgets.map(m=>m.id),['test.alpha']);
+ const ids=[];for(const id of ['beta','gamma','delta'])ids.push((await req('/api/source',{categoryId,url:`https://example.org/${id}.js`},201)).parse().source.id);
+ const collection='https://example.org/set.rex';
+ globalThis.fetch=async u=>u===collection?Response.json({icon:'./art.png',widgets:[]}):new Response(js.replace('test.alpha',`test.${new URL(u).pathname.slice(1,-3)}`).replace('1.0.0',version));
+ const collectionSource=(await req('/api/source',{url:collection},201)).parse().source;
+ assert.equal(collectionSource.icon,'https://example.org/art.png');
+ assert.equal((await req('/s/auto-hub.rex')).parse().widgets.length,4);
+ version='2.0.0';const result=(await req('/api/source/batch',{ids:[local.id,...ids],action:'check'})).parse();
+ assert.equal(result.checked,2);assert.equal(result.queued,1);assert.equal(result.skipped,1);
+ await req('/api/sync',{});assert.equal((await req('/s/auto-hub.rex')).parse().widgets.filter(m=>m.version===version).length,3);
+ await req('/api/source/batch',{ids:[local.id,...ids],action:'delete'});
+ assert.equal((await req('/s/auto-hub.rex')).parse().widgets.length,0);
+});

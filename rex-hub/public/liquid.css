@@ -86,16 +86,32 @@ body { background:var(--lg-base); background-attachment:scroll; color:var(--lg-l
 
 #app .library-panel { min-width:0; }
 #app .library-panel>.library-search { display:block; margin:12px 12px 4px; width:calc(100% - 24px); }
-#app .library-source>summary { min-height:65px; padding:8px 15px; gap:12px; }
+#app .library-source-row { position:relative; min-width:0; }
+#app .library-source-row:not([hidden])~.library-source-row:not([hidden]) { border-top:1px solid var(--lg-rule); }
+#app .library-source>summary { min-height:65px; padding:8px 79px 8px 15px; gap:12px; }
+#app .library-sources.is-selecting .library-source>summary { padding-inline-start:48px; }
+#app .library-source-row>:is(.library-source-select,.library-source-check) { position:absolute; top:32.5px; transform:translateY(-50%); }
+#app .library-source-row>.library-source-select { inset-inline-start:3px; width:44px; height:44px; display:grid; place-items:center; cursor:pointer; }
+#app .library-source-select input { width:20px; height:20px; accent-color:var(--lg-tint); }
+#app .library-source-row>.library-source-check { inset-inline-end:12px; min-width:55px; min-height:44px; padding-inline:8px; font-size:13px; }
+#app .library-source-row>.library-source-check:not([data-busy]):disabled { cursor:not-allowed; }
 #app .library-panel summary,#dialog summary { color:var(--lg-label); }
 #app .library-panel summary:active { background:var(--lg-tint-wash); }
-#app .library-glyph { border:0; background:var(--lg-tint-wash); color:var(--lg-tint); box-shadow:none; font-weight:650; }
+#app .library-glyph { border:0; background:var(--lg-tint-wash); box-shadow:none; overflow:hidden; }
+#app .library-glyph img { display:block; width:100%; height:100%; object-fit:cover; }
+#app .library-multiselect { min-width:44px; min-height:44px; display:inline-grid; place-items:center; padding:0; }
+#app .library-multiselect[aria-pressed=true] { color:var(--lg-tint); background:var(--lg-tint-wash); border-color:var(--lg-tint); }
+#app .library-batch { padding:8px 12px; gap:6px; border-bottom:1px solid var(--lg-rule); }
+#app .library-batch small { flex:1 0 100%; }
+#app .library-batch .btn { min-height:44px; padding-inline:9px; font-size:13px; }
+#app .library-batch .btn:not([data-busy]):disabled { cursor:not-allowed; }
+#dialog .library-delete-list { margin:0; padding-inline-start:1.5em; }
 #app .library-count { color:var(--lg-secondary); background:var(--lg-inset); }
 #app .chevron { border-color:var(--lg-tertiary); }
 #app .library-body { padding:2px 12px 12px; }
 #app .library-modules,#app .library-options { background:var(--lg-inset); border:0; border-radius:13px; }
-#app .library-modules>details[hidden]+details:not([hidden]),#app .library-sources>details[hidden]+details:not([hidden]) { border-top:0; }
-#app :is(.library-modules,.library-sources)>details:not([hidden])~details:not([hidden]) { border-top:1px solid var(--lg-rule); }
+#app .library-modules>details[hidden]+details:not([hidden]) { border-top:0; }
+#app .library-modules>details:not([hidden])~details:not([hidden]) { border-top:1px solid var(--lg-rule); }
 #app .library-source[open]>.library-body,#app .library-module[open]>.library-module-body,#app .library-options[open]>.library-settings { animation:lg-reveal .18s var(--lg-smooth) both; }
 #app .library-module>summary,#app .library-options>summary { padding-inline:12px; min-height:46px; }
 #app .library-module-body,#app .library-settings { padding:5px 12px 12px; }
@@ -202,7 +218,11 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 @media (max-width:385px) {
   #app :is(.library-head,section.glass.pad.stack)>.row { gap:5px; }
   #app :is(.library-head,section.glass.pad.stack)>.row .btn { font-size:13px; padding-inline:10px; }
-  #app .library-source>summary { padding-inline:12px; gap:8px; }
+  #app .library-source>summary { padding-inline:12px 70px; gap:8px; }
+  #app .library-source-row>.library-source-check { inset-inline-end:9px; }
+  #app .library-source-row>.library-source-select { inset-inline-start:0; }
+  #app .library-sources.is-selecting .library-source>summary { padding-inline-start:42px; }
+  #app .library-batch .btn { padding-inline:8px; }
 }
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
   :root { --lg-glass:var(--lg-group); --lg-sheet:var(--lg-group); }

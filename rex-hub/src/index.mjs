@@ -7,7 +7,7 @@ import { MAX_SOURCES, MAX_ITEMS, MAX_DISTS, fail, randomKey, keyOK, build, block
 
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:JSON_HEADERS});
-const empty=()=>({sources:[],categories:[],distributions:[],logs:[],origin:'',settings:{defaultRefreshMinutes:30,defaultDelivery:'link',defaultIcon:'',defaultNewPolicy:'review'}});
+const empty=()=>({sources:[],categories:[],distributions:[],logs:[],sourceChecks:[],origin:'',settings:{defaultRefreshMinutes:30,defaultDelivery:'link',defaultIcon:'',defaultNewPolicy:'review'}});
 const uid=()=>crypto.randomUUID();
 async function get(env){const row=await env.DB.prepare('SELECT revision,document FROM hub_state WHERE id=1').first();if(!row)throw new Error('Missing migrations');return {revision:row.revision,st:{...empty(),...JSON.parse(row.document)}};}
 async function change(env,fn){
@@ -90,19 +90,24 @@ async function sync(env,requested,requestOrigin,moduleId){
     const collectionDue=s=>s.url?(Date.parse(s.checkedAt)||0)+(s.refreshMinutes||30)*60_000:Infinity;
     const due=s=>Math.min(collectionDue(s),mirrorDue(s,now,origin));
     const eligible=st.sources.filter(s=>!s.paused).map(s=>({...s,delivery:s.delivery??st.settings.defaultDelivery,refreshMinutes:s.refreshMinutes??st.settings.defaultRefreshMinutes,newPolicy:s.newPolicy??st.settings.defaultNewPolicy}));
-    const candidates=requested?eligible.filter(s=>s.id===requested):eligible.filter(s=>due(s)<=now).sort((a,b)=>due(a)-due(b)).slice(0,2);
+    const queue=new Set(st.sourceChecks);
+    const candidates=requested?eligible.filter(s=>s.id===requested):eligible.filter(s=>queue.has(s.id)||due(s)<=now).sort((a,b)=>Number(queue.has(b.id))-Number(queue.has(a.id))||due(a)-due(b)).slice(0,2);
     const results=await Promise.all(candidates.map(async s=>{
       let next=s, error='';
-      if(s.url&&!moduleId&&(requested||collectionDue(s)<=now)){
+      const forced=!!requested||queue.has(s.id);
+      if(s.url&&!moduleId&&(forced||collectionDue(s)<=now)){
         try{const refreshed=await refresh(s,env,origin);next={...refreshed,modules:applyNewPolicy(s,refreshed.modules)};}
         catch(e){error=e.status&&e.status<500?e.message:'拉取失败，已保留上次有效结果';next={...s,status:error,checkedAt:new Date().toISOString()};}
       }
-      if(origin&&(requested||mirrorDue(next,now,origin)<=now))next=await mirrorSource(next,env,origin,{force:!!requested,moduleId});
-      return {s,next,error};
+      if(origin&&(forced||mirrorDue(next,now,origin)<=now))next=await mirrorSource(next,env,origin,{force:forced,moduleId});
+      const oldMirrors=new Map(s.modules.map(m=>[m.id,m.mirror]));
+      const mirrorFailed=next.modules.filter(m=>m.mirror?.error&&m.mirror.checkedAt!==oldMirrors.get(m.id)?.checkedAt).length;
+      return {s,next,error,mirrorFailed};
     }));
-    if(!results.length&&!requested)return {ok:true,checked:0,failed:0};
+    if(!results.length&&!requested&&!queue.size)return {ok:true,checked:0,failed:0,queued:0};
     return await change(env,current=>{
-      for(const {s,next,error} of results){
+      const processed=new Set();let failed=0;
+      for(const {s,next,error,mirrorFailed} of results){
         const index=current.sources.findIndex(x=>x.id===s.id);
         if(index<0||current.sources[index].paused||current.sources[index].edit!==s.edit)continue;
         if(next.modules.length>MAX_ITEMS)continue;
@@ -111,9 +116,13 @@ async function sync(env,requested,requestOrigin,moduleId){
         if(error)appendLog(current,`「${logLabel(s)}」同步失败：${error}`);
         if(added.length)appendLog(current,`「${logLabel(s)}」新增 ${added.length} 个模块：${added.filter(m=>m.pending).length} 个待审核`);
         current.sources[index]=markFiles(next,origin,s);
+        if(error||mirrorFailed)failed++;
+        if(mirrorFailed)appendLog(current,`「${logLabel(s)}」${mirrorFailed} 个托管模块检查失败，保留上次有效文件`);
+        if(!moduleId)processed.add(s.id);
       }
+      current.sourceChecks=current.sourceChecks.filter(id=>!processed.has(id)&&current.sources.some(s=>s.id===id&&!s.paused));
       if(origin)republish(current,origin);
-      return {ok:true,checked:results.length,failed:results.filter(r=>r.error).length};
+      return {ok:true,checked:results.length,failed,queued:current.sourceChecks.length};
     });
   }finally{await env.DB.prepare('UPDATE hub_guard SET token=NULL,expires=0 WHERE id=1 AND token=?').bind(lock).run();}
 }
@@ -187,14 +196,35 @@ async function admin(req,env,url){
         if(source.url&&current.sources.some(s=>s.url===source.url))fail(409,'这个来源地址已添加');
         current.sources.push(markFiles({...source,edit:uid()},originFor(env,current,origin)));
       }
+      republish(current,originFor(env,current,origin),{allowRemoval:!!a.replaceId});
       appendLog(current,`已保存来源「${logLabel(source)}」：${source.modules.length} 个模块`);
       return {ok:true,source};
     }),201);
   });
-  if(path==='/api/source/update'&&a.delete===true){
-    await change(env,st=>{const site=originFor(env,st,origin);removeSource(st,by(st.sources,a.id,'来源'),site);republish(st,site);appendLog(st,'已删除来源并撤下其分发模块');});
+  if(path==='/api/source/batch'||(path==='/api/source/update'&&a.delete===true)){
+    const action=path==='/api/source/batch'?a.action:'delete';
+    const ids=path==='/api/source/batch'?list(a.ids,MAX_SOURCES):[a.id];
+    if(!ids.length||!['check','delete'].includes(action))fail(400,'请选择来源与操作');
+    if(action==='check'){
+      const pending=await change(env,st=>{
+        const now=Date.now(),site=originFor(env,st,origin);
+        const rows=ids.map(id=>by(st.sources,id,'来源'));
+        const eligible=rows.filter(s=>!s.paused&&(s.url||Number.isFinite(mirrorDue({...s,delivery:s.delivery??st.settings.defaultDelivery},now,site))));
+        st.sourceChecks=[...new Set([...eligible.map(s=>s.id),...st.sourceChecks])];
+        return {queued:st.sourceChecks.length,skipped:rows.length-eligible.length};
+      });
+      if(!pending.queued)return json({ok:true,checked:0,...pending});
+      try{return json({...await sync(env,undefined,origin),skipped:pending.skipped});}
+      catch(err){if(err.status!==409)throw err;return json({ok:true,checked:0,...pending});}
+    }
+    await change(env,st=>{
+      const site=originFor(env,st,origin), rows=ids.map(id=>by(st.sources,id,'来源'));
+      for(const s of rows)removeSource(st,s,site);
+      st.sourceChecks=st.sourceChecks.filter(id=>!ids.includes(id));
+      republish(st,site);appendLog(st,`已删除 ${rows.length} 个来源并更新分发`);
+    });
     let pending=false;try{await drainFiles(env,origin);}catch{pending=true;}
-    return json({ok:true,cleanupPending:pending||(await get(env)).st.fileDeletes?.length>0});
+    return json({ok:true,deleted:ids.length,cleanupPending:pending||(await get(env)).st.fileDeletes?.length>0});
   }
   return json(await change(env,st=>{
     st.origin ||= origin;
@@ -244,6 +274,7 @@ async function admin(req,env,url){
     }else if(path==='/api/publish'){
       return publish(st,by(st.distributions,a.id,'分发'),originFor(env,st,origin),a.confirmEmpty);
     }else fail(404,'接口不存在');
+    if(path==='/api/module/update'||path==='/api/source/update'||path==='/api/category')republish(st,originFor(env,st,origin));
     return {ok:true};
   }));
 }
