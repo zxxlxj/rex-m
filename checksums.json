@@ -1,12 +1,12 @@
 {
-  "version": "2.1.1",
+  "version": "2.2.0",
   "format": "REXENC",
   "payload_comments": 0,
   "sha256": {
-    ".gitignore": "df4437fec1421d69bc2c86f609ff11b0d5a74d19692b0b12a5e1a4437d1be43a",
-    "README.md": "f6d631f83b71804283bdb7143af6bf8e85af91d46f45ba1783c7ee04af61f22d",
+    ".gitignore": "ad3eb81b1f676763ded3edebb0077830335a36982d9789ff0deebb106f8e9b07",
+    "README.md": "b24234d9fc97c4f1e62c6797114ffa84a00aab27ed6bf57a6673fdb396d310bd",
     "assets/mania.png": "021e121b5e196e24d0e348de29a5b7c55c6d32e13c1fdf373217de79bc4b42c8",
-    "docs/plugin-platform/examples/mania/mania.rex.js": "8aafb37d934e1a9855de2507a4e8da9f02ef0c755a94a96eef68f1aab436273d",
-    "mania.rex": "3d48b62d604103c3f6abeef13f4ee52cb65d87e0c684025e9f298844f2af926d"
+    "docs/plugin-platform/examples/mania/mania.rex.js": "2b89b411b7c1bf1247a5e39a683e9a77b881a62e4b7c7df029737699ee89fdd0",
+    "mania.rex": "052ac5bdc80231196ae3bd1310dea6225340b2da814213da2250c9af45e3d39a"
   }
 }
