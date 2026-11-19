@@ -63,11 +63,29 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   const app=document.getElementById('app');if(!app)return;
   const standalone=matchMedia('(display-mode: standalone)');
   const active=()=>standalone.matches||navigator.standalone===true;
-  const limit=58;let touch=null,busy=false,distance=0;
+  const limit=58;let touch=null,busy=false,distance=0,note='',last='',pool=[];
+  const notes=[
+    '松手松手，快松手！','可以松了，别舍不得。','到站啦，请松手。','别拽啦，已经够了！',
+    '手指辛苦了，可以休息了。','松手吧，我接得住。','这一拉，刚刚好。','手指请有序离场。',
+    '库存管理员已就位，请松手。','再拉下去，仓库要搬家了。','门开了，松手就进。','到这儿就行，不用拉到楼下。',
+    '刷新键：终于轮到我了。','手指下班，刷新上班。','松手，剩下的交给我。','你拉得很稳，现在松手。',
+    '就差最后一步：松手。','准备好了，放手一搏。','再拽也没有隐藏关卡。大概。','拉得够远了，回来吧。',
+    '检测到超认真下拉，准许松手。','别客气，松手就是。','刷新组已到齐，请松手。','请放开屏幕，它想刷新。',
+    '一拉一松，配合愉快。','这里不是拔河比赛，可以松了。','进度满格，手指自由。','已经拉满，不必加班。',
+    '恭喜解锁：松手刷新。','松手吧，屏幕不会跑。','这一单我来处理，请松手。','停停停，正好可以刷新！'
+  ];
+  function nextNote(){
+    if(!pool.length){pool=notes.slice();for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}if(pool.at(-1)===last)[pool[0],pool[pool.length-1]]=[pool.at(-1),pool[0]];}
+    last=pool.pop();return last;
+  }
   const indicator=document.createElement('div');indicator.className='lg-pull';indicator.setAttribute('role','status');indicator.hidden=true;
   const label=document.createElement('span');indicator.append(label);document.body.append(indicator);
-  function show(y,text,loading=false){indicator.hidden=false;indicator.classList.toggle('is-refreshing',loading);indicator.style.setProperty('--pull',`${y}px`);label.textContent=text;}
-  function reset(){touch=null;distance=0;indicator.hidden=true;indicator.classList.remove('is-refreshing');}
+  function show(y,text,phase){
+    indicator.hidden=false;if(indicator.dataset.phase!==phase)indicator.dataset.phase=phase;
+    indicator.style.setProperty('--pull',`${y}px`);
+    if(label.textContent!==text)label.textContent=text;
+  }
+  function reset(){touch=null;distance=0;note='';indicator.hidden=true;delete indicator.dataset.phase;}
   window.addEventListener('touchstart',e=>{
     if(!active()||busy||e.touches.length!==1||Math.max(scrollY,document.scrollingElement?.scrollTop||0)>1||!app.querySelector('#main')||document.querySelector('dialog[open]'))return;
     if(e.target.closest?.('button,a,input,textarea,select,summary,[contenteditable],.library-modules,.activity-list,.dist-results'))return;
@@ -81,14 +99,18 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     if(!distance&&(dy<-8||dx>Math.max(12,dy))){reset();return;}
     if(dy<8&&!distance)return;
     if(e.cancelable)e.preventDefault();
-    distance=Math.max(0,Math.min(84,dy*.55));show(distance,distance>=limit?'松手刷新':'下拉刷新');
+    distance=Math.max(0,Math.min(84,dy*.55));
+    if(distance>=limit){note ||= nextNote();show(distance,note,'armed');}
+    else show(distance,'再拉一点…','pulling');
   },{passive:false});
   window.addEventListener('touchend',async()=>{
     if(!touch)return;
     if(distance<limit){reset();return;}
-    touch=null;busy=true;show(limit,'正在刷新…',true);
-    try{const detail={};app.dispatchEvent(new CustomEvent('rex:pull-refresh',{detail}));if(detail.pending)await detail.pending;}
-    finally{busy=false;reset();}
+    touch=null;busy=true;show(limit,'正在刷新…','loading');
+    try{
+      const detail={};app.dispatchEvent(new CustomEvent('rex:pull-refresh',{detail}));
+      if(detail.pending){if(await detail.pending===true){show(limit,'新鲜出炉！','done');await new Promise(resolve=>setTimeout(resolve,500));}}
+    }finally{busy=false;reset();}
   },{passive:true});
   window.addEventListener('touchcancel',()=>{if(touch)reset();},{passive:true});
 })();
