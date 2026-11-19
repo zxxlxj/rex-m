@@ -43,3 +43,11 @@ https://raw.githubusercontent.com/zxxlxj/rex-m/main/mania.rex
 ## 戏精俱乐部
 
 [查看图标包和资源卡片配置包，预览并导入](./xijing-club/)
+
+## Rex Hub · 模块聚合与分发
+
+在自己的 Cloudflare 账号部署 Rex Hub，将多个模块或 `.rex` 合集重新分类，生成独立分发链接。
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fzxxlxj%2Frex-m%2Ftree%2Fmain%2Frex-hub)
+
+[中文部署与使用说明](./rex-hub/README.md)

@@ -1,0 +1,94 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
+import worker from '../src/index.mjs';
+const origin='https://rex-deploy.example.com';
+const dbSQL=['0001_hub.sql','0002_auth.sql'].map(x=>readFileSync(new URL('../migrations/'+x,import.meta.url),'utf8')).join('\n');
+const secret='test-only-initialization-token-123';
+function fixture(t,extra={}){const sqlite=new DatabaseSync(':memory:');t.after(()=>sqlite.close());sqlite.exec(dbSQL);
+const prepare=(statement,args=[])=>({bind:(...args)=>prepare(statement,args),first:async()=>sqlite.prepare(statement).get(...args)??null,run:async()=>({meta:{changes:sqlite.prepare(statement).run(...args).changes}})});
+const env={SETUP_TOKEN:secret,DB:{prepare,async batch(xs){sqlite.exec('BEGIN');try{const r=await Promise.all(xs.map(x=>x.run()));sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}},FILES:{storage:new Map(),async put(key,value){this.storage.set(key,value);},async get(key){const body=this.storage.get(key);return body?{body,size:body.length,httpEtag:'"test"'}:null;}}};
+let cookie='';Object.assign(env,extra);return async (path,data,expected=200,{requestOrigin=origin}={})=>{const headers={Cookie:cookie,Origin:requestOrigin,'Content-Type':'application/json'};
+const res=await worker.fetch(new Request(origin+path,{method:data===undefined?'GET':'POST',headers,body:data===undefined?undefined:JSON.stringify(data)}),env);
+const payload=await res.text();assert.equal(res.status,expected,payload);if(res.headers.has('Set-Cookie'))cookie=res.headers.get('Set-Cookie').split(';')[0];
+return {payload,parse:()=>JSON.parse(payload)};};}
+const js=`var WidgetMetadata = {id:'test.alpha', title:'Alpha', version:'1.0.0', requiredVersion:'0.0.6', modules:[]};\nfunction loadList(){return [];}`;
+const settings={title:'我的合集',enabled:true,mode:'rules',order:'title'};
+test('setup, upload, independently reclassify, publish two keys and fetch module',async(t)=>{
+const req=fixture(t);await req('/api/state',undefined,401);await req('/api/setup',{token:secret,password:'A long test password!'},403,{requestOrigin:'https://other.example.com'});await req('/api/setup',{token:secret,password:'A long test password!'},201);
+await req('/api/category',{name:'电影'});await req('/api/category',{name:'动画'});
+const {categories}= (await req('/api/state')).parse();
+const {source}= (await req('/api/source',{categoryId:categories[0].id,files:[{name:'alpha.rex.js',text:js}]},201)).parse();
+await req('/api/module/update',{sourceId:source.id,id:'test.alpha',categoryId:categories[1].id});
+const d=(await req('/api/distribution',{...settings,key:'custom-key',categoryIds:[categories[1].id]})).parse();
+const other=(await req('/api/distribution',{...settings,categoryIds:[categories[0].id]})).parse();assert.match(other.key,/^[a-f0-9]{36}$/);
+await req('/s/custom-key.rex',undefined,404);
+await req('/api/publish',{id:d.id});await req('/api/publish',{id:other.id},409);await req('/api/publish',{id:other.id,confirmEmpty:true});
+const {widgets}=(await req('/s/custom-key.rex')).parse();assert.equal(widgets.length,1);assert.equal((await req(new URL(widgets[0].url).pathname)).payload,js);
+assert.equal((await req(`/s/${other.key}.rex`)).parse().widgets.length,0);
+await req('/api/distribution',{...settings,id:d.id,key:'renamed',categoryIds:[categories[1].id]});await req('/s/custom-key.rex',undefined,404);assert.equal((await req('/s/renamed.rex')).parse().widgets[0].id,'test.alpha');
+});
+
+test('upstream collection refresh keeps manual classification and honors prospective onboarding policy',async t=>{
+  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+  const row=(id,version='1.0.0')=>({id,title:id,version,requiredVersion:'0.0.6',url:`https://raw.githubusercontent.com/rex/project/main/${id}.js`});
+  let remote=[row('original')];globalThis.fetch=async()=>Response.json({name:'上游',widgets:remote});
+  const req=fixture(t);await req('/api/setup',{token:secret,password:'A long test password!'},201);
+  await req('/api/category',{name:'旧模块'});await req('/api/category',{name:'新模块'});
+  const {categories:[oldCategory,newCategory]}=(await req('/api/state')).parse();
+  const {source:s}=(await req('/api/source',{url:'https://raw.githubusercontent.com/rex/project/main/all.rex'},201)).parse();
+  await req('/api/source/update',{id:s.id,newPolicy:'review',newCategoryId:newCategory.id});
+  await req('/api/module/update',{sourceId:s.id,id:'original',categoryId:oldCategory.id});
+  const d=(await req('/api/distribution',{...settings,key:'new-content',categoryIds:[newCategory.id]})).parse();
+  await req('/api/publish',{id:d.id,confirmEmpty:true});
+  remote=[row('original','2.0.0'),row('waiting')];await req('/api/sync',{id:s.id});
+  const [old,waiting]=(await req('/api/state')).parse().sources[0].modules;
+  assert.equal(old.categoryId,oldCategory.id);assert.equal(old.version,'2.0.0');assert.equal(waiting.categoryId,newCategory.id);assert.equal(waiting.pending,true);
+  assert.equal((await req('/s/new-content.rex')).parse().widgets.length,0);
+  await req('/api/source/update',{id:s.id,newPolicy:'auto'});
+  remote.push(row('automatic'));await req('/api/sync',{id:s.id});
+  assert.deepEqual((await req('/s/new-content.rex')).parse().widgets.map(x=>x.id),['automatic']);
+  await req('/api/module/update',{sourceId:s.id,id:'waiting',approve:true,categoryId:newCategory.id});
+  await req('/api/publish',{id:d.id});assert.deepEqual((await req('/s/new-content.rex')).parse().widgets.map(x=>x.id),['automatic','waiting']);
+});
+
+test('downloaded JS is distributed via stable URL and save-and-publish is atomic',async t=>{
+  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+  const upstream='https://example.com/standalone.js';
+  let version='1.0.0', offline=false;
+  const bytes=()=>js.replace('1.0.0',version);
+  globalThis.fetch=async ()=>{if(offline)return new Response(null,{status:502});return new Response(bytes());};
+  const req=fixture(t);await req('/api/setup',{token:secret,password:'A long test password!'},201);
+  const {source:s}=(await req('/api/source',{url:upstream,delivery:'mirror',refreshMinutes:15},201)).parse();
+  const draft={...settings,key:'stable-files',sourceIds:[s.id],publish:true};
+  const first=s.modules[0];
+  if(!first.mirror?.url)await req('/api/distribution',draft,409);
+  await req('/api/sync',{id:s.id});
+  const d=(await req('/api/distribution',draft)).parse();
+  assert.equal(d.published,true);
+  const v1=(await req('/s/stable-files.rex')).parse().widgets[0];
+  assert.equal(v1.url,origin+'/m/stable-files/test.alpha.js');
+  assert.equal((await req(new URL(v1.url).pathname)).payload,bytes());
+  await req('/api/distribution',{...draft,id:d.id,title:'未发布的规则',sourceIds:[],publish:false});
+  version='1.0.1';await req('/api/sync',{id:s.id,moduleId:'test.alpha'});
+  const v2=(await req('/s/stable-files.rex')).parse();
+  assert.equal(v2.title,settings.title);assert.equal(v2.widgets[0].version,version);assert.equal(v2.widgets[0].url,v1.url);
+  assert.equal((await req(new URL(v1.url).pathname)).payload,bytes());
+  offline=true;await req('/api/sync',{id:s.id,moduleId:'test.alpha'});
+  assert.equal((await req(new URL(v1.url).pathname)).payload,bytes());
+  await req('/api/distribution',{...draft,id:d.id,sourceIds:[]},409);
+  assert.equal((await req('/s/stable-files.rex')).parse().widgets.length,1);
+});
+
+test('dashboard defaults persist and password change invalidates existing sessions',async t=>{
+ const req=fixture(t);const old='A long test password!', next='A different long password!';
+ await req('/api/setup',{token:secret,password:old},201);
+ await req('/api/settings',{defaultRefreshMinutes:60,defaultDelivery:'mirror',defaultNewPolicy:'auto',defaultIcon:''});
+ assert.equal((await req('/api/state')).parse().settings.defaultRefreshMinutes,60);
+ await req('/api/password',{currentPassword:'wrong',newPassword:next},403);
+ await req('/api/password',{currentPassword:old,newPassword:next});
+ assert.equal((await req('/api/session')).parse().authenticated,true);
+ await req('/api/logout',{});await req('/api/login',{password:old},401);await req('/api/login',{password:next});
+ assert.equal((await req('/api/session')).parse().authenticated,true);
+});
