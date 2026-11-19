@@ -65,38 +65,89 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   const active=()=>standalone.matches||navigator.standalone===true;
   const limit=58;let touch=null,busy=false,distance=0,note='',last='',pool=[];
   const notes=[
-    '松手松手，快松手！','可以松了，别舍不得。','到站啦，请松手。','别拽啦，已经够了！',
-    '手指辛苦了，可以休息了。','松手吧，我接得住。','这一拉，刚刚好。','手指请有序离场。',
-    '库存管理员已就位，请松手。','再拉下去，仓库要搬家了。','门开了，松手就进。','到这儿就行，不用拉到楼下。',
-    '刷新键：终于轮到我了。','手指下班，刷新上班。','松手，剩下的交给我。','你拉得很稳，现在松手。',
-    '就差最后一步：松手。','准备好了，放手一搏。','再拽也没有隐藏关卡。大概。','拉得够远了，回来吧。',
-    '检测到超认真下拉，准许松手。','别客气，松手就是。','刷新组已到齐，请松手。','请放开屏幕，它想刷新。',
-    '一拉一松，配合愉快。','这里不是拔河比赛，可以松了。','进度满格，手指自由。','已经拉满，不必加班。',
-    '恭喜解锁：松手刷新。','松手吧，屏幕不会跑。','这一单我来处理，请松手。','停停停，正好可以刷新！',
-    '仓库卷帘门已开，松手收货！','库存盘点完毕，就等你放手。','刷新件已打包，请松手签收。','再拉就要按体积收费了，松手！',
-    '手指的绩效已达标，请松手。','拇指辛苦了，申请换班。','本次下拉不计步，可以松了。','再拉就要给拇指发加班费了。',
-    '刷新火箭倒数：三、二、松手！','已经在轨道上了，请松手。','不是发射失败，是你还没松手。','控制台呼叫拇指：允许松手。',
-    '别拉到明天，今天就能刷新。','你负责松手，我负责假装很忙。','松手领一份刚出炉的数据。','小心，下面没有第二层彩蛋。',
-    '小恐龙在门口等你松手。','小恐龙说：我的尾巴不是拉杆。','小恐龙举牌：可以了！','小恐龙已系好安全带，松手吧。',
-    '到站了，本次不提供续拉。','电梯到了，请放开开门键。','到站不停？那也得先松手。','车门已开，请拇指先下。',
-    '听劝，松手。','拉得漂亮，收工！','我数到三。三！','放手吧，不扣分。',
-    '刷新正在等一个松手的机会。','别和进度条较劲，它已经满了。','请释放这只被扣押的屏幕。','你已经拉出了刷新键的自尊。'
+      "松手松手快松手！我还没买保险 😭",
+      "已读。已下拉。就差你松手了 🙃",
+      "此处没有隐藏关卡，只有一个被拉长的后台 🫠",
+      "可以松了，屏幕已经认输 🏳️",
+      "别拽了，我不是卷帘门 😫",
+      "你松手，我马上装作一切尽在掌握 😎",
+      "手指请有序离场，数据即将登台 🎭",
+      "拉得很好，下次不用拉这么认真 🤝",
+      "仓管：谁把我从午睡里拉出来的 😴",
+      "快松手！再拉下去仓库要算违建了 🏚️",
+      "包裹已打包，请用一个松手签收 📦",
+      "库存没跑，但仓管已经跑了 💨",
+      "松手，给数据一个上架的机会 🛒",
+      "仓管看了一眼工单，默默推回给你：松手 🧾",
+      "你拉的是页面，不是仓库的房租 💸",
+      "卷帘门：我已经开了，你倒是进去啊 😩",
+      "小恐龙：我的尾巴不是下拉手柄 🦖",
+      "小恐龙说：你再不松手，我就要灭绝第二次了 ☄️",
+      "恐龙已就位，但它不会替你松手 🦖",
+      "小恐龙把刷新键藏起来了。骗你的，松手 🤫",
+      "恐龙发来一条语音：吼——可以松了 🎙️",
+      "小恐龙：这不是我想象中的牵手 🥲",
+      "化石都等新数据等活了，你还没松手 🦴",
+      "松手吧，小恐龙的短手够不到屏幕 🦖",
+      "三，二，一……导演喊松手了 🎬",
+      "我数到三。三。你怎么还在拉 😂",
+      "发射台报告：不是火箭没油，是拇指没松 🚀",
+      "地面指挥中心：允许拇指撤离 🎧",
+      "再拉也到不了火星，这里是 Rex Hub 🪐",
+      "火箭已经热好，司机还在等你松手 🚀",
+      "拇指控制台提示：起飞，不是拔河 🛰️",
+      "宇航员都系好安全带了，你还握着发射按钮 😬",
+      "工单已流转至「请你松手」部门 🗂️",
+      "刷新组刚开完会，结论是：松手 📋",
+      "谁拉了工单？哦，是你。请松手 😶",
+      "再拉三秒，系统就要给拇指开加班单 🧑‍💻",
+      "松手。以上就是本次会议纪要。📝",
+      "实习生提议：要不我们先松个手？🙋",
+      "本次刷新不需要领导审批，松手就行 😌",
+      "刷新键交了申请，拇指是唯一审批人 📮",
+      "下一站：松手。请勿坐过站 🚇",
+      "车门已开，拇指请先下车 🚋",
+      "电梯到了，开门键真的不用一直按 🛗",
+      "乘客朋友们，别再把站台往下拉了 🎙️",
+      "这不是直达楼下的电梯，可以松手 🏢",
+      "司机问：你要刷新，还是要开到终点站？🚌",
+      "已到目的地。坚持下拉不送积分 🎫",
+      "本次不换乘，直接松手 🚉",
+      "别再拉了，冰箱门都没你拽得久 🧊",
+      "数据出锅前最后一步：盖子松开 🍳",
+      "刷新还没开始，围观群众瓜子都磕完了 🍿",
+      "就等你松手，我好把数据端上来 🍜",
+      "松手，没熟我再回锅（数据，不是手指）🥘",
+      "这一拉够一碗拉面了，收手吧 🍜",
+      "暂停拔河，先吃颗糖再松手 🍬",
+      "这不是抓娃娃，松手也不会掉币 🕹️",
+      "屏幕：我只是来上班，怎么就成橡皮筋了 🫠",
+      "放开这个屏幕，它只是想更新一下 🥺",
+      "你赢了。奖品是一次刷新 🎁",
+      "进度条：我都满了，你还卷什么 😵‍💫",
+      "这位玩家，长按不加伤害，松手刷新 🎮",
+      "你已经拉出了刷新键的自尊，请给它个台阶 🥹",
+      "拇指：这一下我能吹到明天。现在松手 😏",
+      "可以放手了，我们的关系不必这么紧张 🫶"
   ];
   function nextNote(){
     if(!pool.length){pool=notes.slice();for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}if(pool.at(-1)===last)[pool[0],pool[pool.length-1]]=[pool.at(-1),pool[0]];}
     last=pool.pop();return last;
   }
   const indicator=document.createElement('div');indicator.className='lg-pull';indicator.setAttribute('role','status');indicator.hidden=true;
-  const icon=document.createElement('span');icon.className='lg-pull-icon';icon.setAttribute('aria-hidden','true');
-  const label=document.createElement('span');label.className='lg-pull-copy';indicator.append(icon,label);document.body.append(indicator);
-  const glyphs=['👋','🛎️','✨','🎈','📦','🧤','🚀','🪄','🦖','🚋','🎯','🔓'];
-  function armedIcon(text){const i=notes.indexOf(text);return i<32?glyphs[i%8]:glyphs[4+Math.floor((i-32)/4)];}
+  const dial=document.createElement('div');dial.className='lg-pull-dial';dial.setAttribute('aria-hidden','true');
+  const icon=document.createElement('span');icon.className='lg-pull-icon';dial.append(icon);
+  const label=document.createElement('span');label.className='lg-pull-copy';indicator.append(dial,label);document.body.append(indicator);
+  const mascots=['🦖','🐙','👻','🐈','🦝','🛸','🐸','📦','🦆','🤖','🦥','🐧'];
+  let mascotIndex=-1;
   function show(y,text,phase){
     indicator.hidden=false;if(indicator.dataset.phase!==phase)indicator.dataset.phase=phase;
     indicator.style.setProperty('--pull',`${y}px`);
-    const glyph=phase==='armed'?armedIcon(text):phase==='done'?'✓':phase==='pulling'?'↓':'';
+    indicator.style.setProperty('--pull-progress',`${Math.min(1,y/limit)*360}deg`);
+    const glyph=phase==='done'?'✓':mascots[mascotIndex];
     if(icon.textContent!==glyph)icon.textContent=glyph;
     if(label.textContent!==text)label.textContent=text;
+    label.hidden=!text;
   }
   function reset(){touch=null;distance=0;note='';indicator.hidden=true;delete indicator.dataset.phase;}
   window.addEventListener('touchstart',e=>{
@@ -104,6 +155,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     if(e.target.closest?.('button,a,input,textarea,select,summary,[contenteditable],.library-modules,.activity-list,.dist-results'))return;
     for(let el=e.target;el instanceof Element&&el!==document.body;el=el.parentElement){if(el.scrollHeight>el.clientHeight+2&&/auto|scroll/.test(getComputedStyle(el).overflowY))return;}
     const p=e.touches[0];touch={x:p.clientX,y:p.clientY,id:p.identifier};
+    mascotIndex=(mascotIndex+1+Math.floor(Math.random()*(mascots.length-1)))%mascots.length;
   },{passive:true});
   window.addEventListener('touchmove',e=>{
     if(!touch)return;
@@ -114,7 +166,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     if(e.cancelable)e.preventDefault();
     distance=Math.max(0,Math.min(84,dy*.55));
     if(distance>=limit){note ||= nextNote();show(distance,note,'armed');}
-    else show(distance,'再拉一点…','pulling');
+    else show(distance,'','pulling');
   },{passive:false});
   window.addEventListener('touchend',async()=>{
     if(!touch)return;

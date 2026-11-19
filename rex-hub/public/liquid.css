@@ -250,3 +250,22 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 @media(prefers-reduced-motion:reduce){.lg-pull>span{animation:none!important}}
 
 .lg-pull{display:flex;align-items:center;gap:7px}.lg-pull[hidden]{display:none!important}.lg-pull>.lg-pull-icon{width:18px;flex:none;text-align:center;font-size:15px;line-height:1;color:var(--lg-tint)}.lg-pull[data-phase=done]>.lg-pull-icon{color:var(--lg-good);font-weight:800}.lg-pull[data-phase=loading]>.lg-pull-icon{width:12px;height:12px;border:2px solid var(--lg-rim);border-top-color:var(--lg-tint);border-radius:50%;animation:lg-pull-spin .65s linear infinite}.lg-pull[data-phase=loading]>.lg-pull-copy{animation:none}@keyframes lg-pull-spin{to{transform:rotate(360deg)}}
+
+/* The joke carries its own emoji; don't duplicate it with an extra leading glyph. */
+.lg-pull[data-phase=armed]>.lg-pull-icon{display:none}
+.lg-pull[data-phase=armed]>.lg-pull-copy{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:center;line-height:1.4}
+
+/* Pull feedback is a dial; the easter egg is a separate line below it. */
+.lg-pull{--pull-ring:var(--lg-tint);top:calc(env(safe-area-inset-top) + 22px);transform:translate(-50%,calc(var(--pull,0px)*.62));flex-direction:column;gap:7px;padding:0;background:none;box-shadow:none;border-radius:0;white-space:normal;width:max-content;max-width:calc(100vw - 28px)}
+.lg-pull-dial{position:relative;display:grid;place-items:center;width:54px;height:54px;flex:none;border-radius:50%;background:var(--lg-sheet);box-shadow:0 3px 14px #0002}
+.lg-pull-dial::before,.lg-pull-dial::after{position:absolute;content:'';border-radius:50%;pointer-events:none}
+.lg-pull-dial::before{inset:0;background:conic-gradient(var(--pull-ring) var(--pull-progress,0deg),var(--lg-rim) 0)}
+.lg-pull-dial::after{inset:3px;background:var(--lg-sheet)}
+.lg-pull-dial>.lg-pull-icon{position:relative;z-index:1;font-size:28px;line-height:1}
+.lg-pull>.lg-pull-copy{padding:7px 12px;border-radius:15px;background:var(--lg-sheet);box-shadow:0 2px 10px #0002;text-align:center;line-height:1.4;overflow-wrap:anywhere}
+.lg-pull>.lg-pull-copy[hidden]{display:none!important}
+.lg-pull[data-phase=armed] .lg-pull-dial{animation:lg-pull-dial-pop .26s var(--lg-spring) both}
+.lg-pull[data-phase=loading] .lg-pull-dial::before{background:conic-gradient(transparent 28%,var(--pull-ring));animation:lg-pull-spin .75s linear infinite}
+.lg-pull[data-phase=done]{--pull-ring:var(--lg-good)}.lg-pull[data-phase=done] .lg-pull-icon{color:var(--lg-good);font-weight:800}
+@keyframes lg-pull-dial-pop{from{transform:scale(.91)}to{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.lg-pull .lg-pull-dial,.lg-pull .lg-pull-dial::before{animation:none!important}}
