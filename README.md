@@ -46,7 +46,10 @@ https://raw.githubusercontent.com/zxxlxj/rex-m/main/mania.rex
 
 ## Rex Hub · 模块聚合与分发
 
-在自己的 Cloudflare 账号部署 Rex Hub，将多个模块或 `.rex` 合集重新分类，生成独立分发链接。
+**当前版本：`0.0.2`**。聚合 Rex 模块、管理和托管徽章包，支持 iPhone 主屏幕 PWA。
+
+> [!WARNING]
+> Workers Free 每账号 100,000 次请求/日；KV 免费每天 1,000 次写入和删除。大徽章包建议先用直链；部署前请看下面说明中的配额和费用提醒。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fzxxlxj%2Frex-m%2Ftree%2Fmain%2Frex-hub)
 

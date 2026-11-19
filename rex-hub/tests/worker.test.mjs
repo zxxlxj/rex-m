@@ -92,3 +92,19 @@ test('dashboard defaults persist and password change invalidates existing sessio
  await req('/api/logout',{});await req('/api/login',{password:old},401);await req('/api/login',{password:next});
  assert.equal((await req('/api/session')).parse().authenticated,true);
 });
+
+test('deleting a source withdraws published widgets and removes only unshared hosted files',async t=>{
+ const storage=new Map(), deleted=[];
+ const req=fixture(t,{FILES:{async put(k,v){storage.set(k,v);},async get(k){const v=storage.get(k);return v?{body:v,size:v.length,httpEtag:'"test"'}:null;},async delete(k){deleted.push(k);storage.delete(k);}}});
+ await req('/api/setup',{token:secret,password:'A long test password!'},201);
+ const files=[{name:'alpha.js',text:js}];
+ const a=(await req('/api/source',{files},201)).parse().source;
+ const b=(await req('/api/source',{files},201)).parse().source;
+ const path=new URL(a.modules[0].url).pathname;
+ await req('/api/distribution',{...settings,key:'shared',sourceIds:[a.id],publish:true});
+ await req('/api/source/update',{id:a.id,delete:true});
+ assert.equal((await req('/s/shared.rex')).parse().widgets.length,0);
+ assert.equal((await req(path)).payload,js);assert.equal(deleted.length,0);
+ await req('/api/source/update',{id:b.id,delete:true});
+ assert.equal(storage.size,0);assert.ok(deleted.includes(path.slice(1)));await req(path,undefined,404);
+});

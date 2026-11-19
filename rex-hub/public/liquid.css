@@ -1,0 +1,225 @@
+/* Rex Hub · material and typography layer. Load after style/distributions/badges. */
+:root {
+  color-scheme: light dark;
+  --lg-base:#f2f2f7; --lg-group:#fff; --lg-inset:#f2f2f7; --lg-control:#e9e9ef;
+  --lg-label:#17171a; --lg-secondary:#55555d; --lg-tertiary:#696971; --lg-rule:#dddde4;
+  --lg-tint:#0058c7; --lg-fill:#0066d5; --lg-on-fill:#fff; --lg-tint-wash:#e7f0ff;
+  --lg-danger:#ba2531; --lg-good:#216d44; --lg-warn:#875114;
+  --lg-glass:rgba(250,250,254,.78); --lg-sheet:rgba(254,254,255,.94); --lg-overlay:#0b0b153a;
+  --lg-edge:rgba(255,255,255,.94); --lg-rim:rgba(38,39,54,.14); --lg-puck:rgba(119,125,146,.16);
+  --lg-light:rgba(255,255,255,.8); --lg-shadow:0 1px 2px #25253b12,0 9px 29px #25253b23;
+  --lg-gap:clamp(12px,3.7vw,32px); --lg-radius:19px; --lg-content:1060px;
+  --lg-smooth:cubic-bezier(.22,.75,.3,1); --lg-spring:cubic-bezier(.22,.88,.28,1.12);
+  --ink:var(--lg-label); --muted:var(--lg-secondary); --blue:var(--lg-tint); --line:var(--lg-rule);
+  --shine:var(--lg-edge); --panel:var(--lg-group); --shadow:var(--lg-shadow); --r:var(--lg-radius);
+}
+@media (prefers-color-scheme:dark) {
+  :root {
+    --lg-base:#101012; --lg-group:#1c1c1e; --lg-inset:#242426; --lg-control:#303034;
+    --lg-label:#f5f5f7; --lg-secondary:#b3b3bc; --lg-tertiary:#a3a3ad; --lg-rule:#39393d;
+    --lg-tint:#80baff; --lg-fill:#a9cfff; --lg-on-fill:#052345; --lg-tint-wash:#202e43;
+    --lg-danger:#ff9ca4; --lg-good:#86d8a6; --lg-warn:#efbf83;
+    --lg-glass:rgba(40,40,44,.77); --lg-sheet:rgba(30,30,33,.95); --lg-overlay:#0009;
+    --lg-edge:rgba(255,255,255,.23); --lg-rim:rgba(255,255,255,.065); --lg-puck:rgba(220,225,241,.15);
+    --lg-light:rgba(255,255,255,.15); --lg-shadow:0 1px 2px #0006,0 9px 30px #0007;
+  }
+}
+body { background:var(--lg-base); background-attachment:scroll; color:var(--lg-label); }
+#app,#dialog,#notice { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",system-ui,sans-serif; }
+:is(#app,#dialog) a { color:var(--lg-tint); }
+:is(#app,#dialog) :focus-visible { outline:2px solid var(--lg-tint); outline-offset:3px; }
+:is(#app,#dialog) [hidden] { display:none !important; }
+#app .glass { background:var(--lg-group); border:0; border-radius:var(--lg-radius); box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+#app .top { position:sticky; z-index:5; top:0; padding:calc(10px + env(safe-area-inset-top)) max(var(--lg-gap),env(safe-area-inset-right)) 10px max(var(--lg-gap),env(safe-area-inset-left)); background:var(--lg-glass); border:0; box-shadow:0 1px 0 var(--lg-rim); backdrop-filter:blur(22px) saturate(155%); -webkit-backdrop-filter:blur(22px) saturate(155%); }
+#app .top>.row { max-width:var(--lg-content); display:grid; grid-template-columns:minmax(120px,1fr) auto minmax(120px,1fr); gap:16px; }
+#app .top [data-act=logout] { justify-self:end; }
+#app .brand { gap:9px; font-size:16px; font-weight:740; letter-spacing:-.03em; }
+#app .brand small { margin-top:2px; color:var(--lg-secondary); font-size:11px; font-weight:530; letter-spacing:.025em; }
+#app .brand img,#app .icon,#dialog .icon { border:0; background:var(--lg-inset); box-shadow:0 0 0 1px var(--lg-rim); border-radius:11px; }
+#app .brand img { width:36px; height:36px; background:#f5f5fa; padding:2px; }
+#app .top .nav { position:relative; isolation:isolate; display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:0; min-width:0; padding:3px; width:auto; order:0; border:0; border-radius:999px; background:var(--lg-inset); box-shadow:inset 0 0 0 1px var(--lg-rim); }
+#app .nav button { position:relative; z-index:1; min-height:40px; min-width:0; gap:5px; padding:0 10px; border:0; border-radius:999px; background:transparent; box-shadow:none; color:var(--lg-secondary); font-size:13px; line-height:1.1; font-weight:650; }
+#app .nav button[aria-current=page] { color:var(--lg-tint); background:var(--lg-puck); }
+#app .nav[data-lg-ready] button[aria-current=page] { background:transparent; }
+#app .lg-nav-icon { display:block; flex:none; width:20px; height:20px; }
+#app .lg-nav-puck { position:absolute; z-index:0; pointer-events:none; inset:3px auto 3px 3px; width:calc((100% - 6px) / var(--lg-count)); transform:translateX(calc(var(--lg-index) * 100%)); border-radius:inherit; background:var(--lg-puck); box-shadow:inset 0 1px 0 var(--lg-light),inset 0 -1px 0 var(--lg-rim); }
+#app .nav button:active { transform:scale(.94); }
+#app .top .nav::before { content:""; position:absolute; z-index:0; inset:1px; border-radius:inherit; pointer-events:none; background:linear-gradient(180deg,var(--lg-light),transparent 39%) top/100% 4px no-repeat; }
+#app .page { max-width:calc(var(--lg-content) + 2 * var(--lg-gap)); grid-template-columns:minmax(0,1fr); gap:18px; padding:26px max(var(--lg-gap),env(safe-area-inset-right)) 40px max(var(--lg-gap),env(safe-area-inset-left)); animation:none; }
+#app .page.lg-switch { animation:lg-screen .22s var(--lg-smooth) both; }
+#app :is(.page,.dist-page)>.library-head { min-height:0; padding:0 2px; gap:10px; }
+#app .library-head h1,#app .auth h1,#app .dist-page .hero h1,#app .rb-head h1 { color:var(--lg-label); font-size:clamp(34px,5vw,46px); font-weight:750; line-height:1.1; letter-spacing:-.045em; }
+#app .page>.hero,#app .dist-page>.hero { padding:0 2px; border-radius:0; background:none; }
+#app .hero::after,#app .auth::before { content:none; }
+#app .eyebrow { color:var(--lg-tint); }
+#app .page h2,#dialog h2,#app .rb-dialog h2 { font-size:21px; font-weight:720; line-height:1.23; letter-spacing:-.025em; }
+#app .rb-panel,#app .rb-live { background:var(--lg-group); border:0; border-radius:var(--lg-radius); box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+#app .rb-live::after { content:none; }
+#app .rb-head .rb-kicker { display:none; }
+#app .rb .rb-btn:not(.rb-primary,.rb-danger-solid,.rb-quiet,.rb-switch,[aria-pressed=true]) { background:var(--lg-control); border-color:transparent; box-shadow:none; }
+#app .rb .rb-btn.rb-primary { background:var(--lg-fill); color:var(--lg-on-fill); box-shadow:none; }
+#app .rb .rb-btn:active:not(:disabled) { transform:scale(.955); }
+#app .page p,#dialog { overflow-wrap:anywhere; }
+#app .page :is(.glass.pad.stack,.library-panel,.activity-list) { padding:0; }
+#app .page .glass.pad.stack:not(.stat) { background:none; gap:8px; }
+#app .page .glass.pad.stack:not(.stat)>:first-child { padding-inline:2px; }
+#app .page .glass.pad.stack:not(.stat)>div:nth-child(2):not(:empty) { padding:6px 16px; background:var(--lg-group); border-radius:var(--lg-radius); min-width:0; }
+#app .page .glass.pad.stack:not(.stat)>div:nth-child(2):has(form) { padding-block:16px; }
+#app .page .glass.pad.stack:not(.stat)>div:empty { display:none; }
+#app .page .box { min-width:0; border:0; background:var(--lg-inset); box-shadow:none; }
+#app .page .box.row.spread { margin:0; padding:6px 0; border-radius:0; background:none; }
+#app .page .box.row.spread+.box.row.spread { border-top:1px solid var(--lg-rule); }
+#app .page .grid[aria-label] { grid-template-columns:repeat(4,minmax(0,1fr)); gap:0; background:var(--lg-group); border-radius:var(--lg-radius); }
+#app .page .grid[aria-label] .stat { position:relative; padding:14px 16px; gap:0; border-radius:0; background:none; }
+#app .stat + .stat { border-inline-start:1px solid var(--lg-rule); }
+#app .stat small { display:block; color:var(--lg-secondary); font-size:13px; font-weight:650; }
+#app .stat strong { margin-top:4px; font-size:clamp(28px,4vw,39px); font-weight:660; line-height:1; }
+#app .grid[aria-label] .stat .btn { position:absolute; inset:0; width:100%; min-height:0; border-radius:10px; padding:0; font-size:0; justify-content:flex-end; transition:background .16s ease; }
+#app .stat .btn::after { content:""; width:7px; height:7px; margin-right:17px; border-inline-end:1.6px solid currentColor; border-block-start:1.6px solid currentColor; transform:rotate(45deg); }
+#app .stat .btn:active { transform:none; background:var(--lg-tint-wash); background:color-mix(in srgb,var(--lg-tint) 9%,transparent); }
+#app .stat .btn:focus-visible { outline-offset:-3px; }
+#app .empty,#app .dist-empty { color:var(--lg-secondary); font-size:14px; padding:15px 0; }
+#app .activity-list>.empty,#app .library-sources>.empty { padding-inline:16px; }
+#app .auth { padding:26px; animation:lg-screen .26s var(--lg-smooth) both; }
+#app .auth .brand { margin-bottom:6px; }
+
+/* Grouped lists: no blur, gradient or shadow per row. */
+#app .library-panel { min-width:0; }
+#app .library-panel>.library-search { display:block; margin:12px 12px 4px; width:calc(100% - 24px); }
+#app .library-source>summary { min-height:65px; padding:8px 15px; gap:12px; }
+#app .library-panel summary,#dialog summary { color:var(--lg-label); }
+#app .library-panel summary:active { background:var(--lg-tint-wash); }
+#app .library-glyph { border:0; background:var(--lg-tint-wash); color:var(--lg-tint); box-shadow:none; font-weight:650; }
+#app .library-count { color:var(--lg-secondary); background:var(--lg-inset); }
+#app .chevron { border-color:var(--lg-tertiary); }
+#app .library-body { padding:2px 12px 12px; }
+#app .library-modules,#app .library-options { background:var(--lg-inset); border:0; border-radius:13px; }
+#app .library-modules>details[hidden]+details:not([hidden]),#app .library-sources>details[hidden]+details:not([hidden]) { border-top:0; }
+#app :is(.library-modules,.library-sources)>details:not([hidden])~details:not([hidden]) { border-top:1px solid var(--lg-rule); }
+#app .library-source[open]>.library-body,#app .library-module[open]>.library-module-body,#app .library-options[open]>.library-settings { animation:lg-reveal .18s var(--lg-smooth) both; }
+#app .library-module>summary,#app .library-options>summary { padding-inline:12px; min-height:46px; }
+#app .library-module-body,#app .library-settings { padding:5px 12px 12px; }
+#app .library-module-body>.btn { min-height:44px; }
+#app .library-mirror { border:0; border-inline-start:2px solid var(--lg-rule); border-radius:0; }
+#app .activity-list { max-height:none; overflow:visible; }
+#app .log { min-height:51px; padding:12px 2px; gap:12px; }
+#app .activity-list .log { margin-inline:16px; }
+#app .log small { color:var(--lg-tertiary); font-size:12px; }
+#app .log>span { font-size:14px; }
+#app .dist-page { gap:18px; }
+#app .dist-page .glass.pad.stack:not(.stat)>div:nth-child(2):has(.dist-directory) { padding:0; }
+#app .dist-toolbar { margin:0; padding:12px; border-bottom:1px solid var(--lg-rule); }
+#app .dist-rows { border:0; background:none; box-shadow:none; border-radius:0; }
+#app .dist-row { padding:12px 15px 5px; }
+#app .dist-count { color:var(--lg-secondary); background:var(--lg-inset); border:0; }
+#app .dist-actions .btn { min-height:44px; }
+#app .dist-status.is-on { color:var(--lg-good); }
+#app .dist-warning,#app .has-pending { color:var(--lg-warn); }
+#app .dist-more>summary { padding-inline:3px; min-height:43px; }
+#dialog :is(.dist-picker,.dist-form-extra,.dist-results,.box) { border:1px solid var(--lg-rule); border-radius:12px; background:var(--lg-inset); box-shadow:none; }
+#dialog .dist-group summary { background:var(--lg-inset); backdrop-filter:none; -webkit-backdrop-filter:none; }
+
+/* Controls. Plain buttons stay legible on the inset backgrounds as well. */
+:is(#app,#dialog) .btn { min-height:44px; padding:7px 13px; border:0; border-radius:100px; background:var(--lg-control); box-shadow:none; color:var(--lg-label); font-size:14px; font-weight:650; transition:transform .22s var(--lg-spring),filter .16s,background .16s; }
+:is(#app,#dialog) .btn.primary { background:var(--lg-fill); color:var(--lg-on-fill); }
+:is(#app,#dialog) .btn.link { background:transparent; color:var(--lg-tint); }
+:is(#app,#dialog) .btn.danger,:is(#app,#dialog) .error { color:var(--lg-danger); }
+:is(#app,#dialog) .btn:active:not(:disabled) { transform:scale(.955); filter:brightness(.94); }
+:is(#app,#dialog) .btn:disabled { cursor:not-allowed; }
+:is(#app,#dialog) .pill { color:var(--lg-tint); background:var(--lg-tint-wash); }
+:is(#app,#dialog) .pill.off { color:var(--lg-warn); background:var(--lg-inset); }
+:is(#app,#dialog) .field>span { color:var(--lg-secondary); }
+:is(#app,#dialog) :is(input:not([type=checkbox]):not([type=hidden]),select,textarea) { min-height:44px; border:1px solid var(--lg-rule); border-radius:11px; background:var(--lg-inset); color:var(--lg-label); }
+:is(#app,#dialog) :is(input,textarea)::placeholder { color:var(--lg-tertiary); }
+:is(#app,#dialog) :is(input[type=search]) { border-color:transparent; }
+:is(#app,#dialog) input::file-selector-button { color:var(--lg-tint); background:var(--lg-tint-wash); }
+:is(#app,#dialog) .toggle input:is(:not([name]),[name=enabled]) { width:42px; height:25px; flex-basis:42px; border:0; padding:3px; background:var(--lg-control); box-shadow:inset 0 0 0 1px var(--lg-rim); }
+:is(#app,#dialog) .toggle input:is(:not([name]),[name=enabled])::before { width:19px; height:19px; }
+:is(#app,#dialog) .toggle input:is(:not([name]),[name=enabled]):checked { background:#26844b; }
+:is(#app,#dialog) .toggle input:is(:not([name]),[name=enabled]):checked::before { transform:translateX(17px); }
+:is(#app,#dialog) pre { background:var(--lg-inset); color:var(--lg-label); }
+@media (hover:hover) {
+  :is(#app,#dialog) .btn:not(:disabled):hover { filter:brightness(.95); }
+  #app .nav button:not([aria-current]):hover { background:var(--lg-puck); }
+  #app .stat .btn:hover { background:color-mix(in srgb,var(--lg-tint) 7%,transparent); }
+}
+
+/* Native dialog retains top-layer modality, Escape and focus restoration. */
+#dialog.glass,#app .rb dialog.rb-dialog { width:min(620px,calc(100% - 36px)); max-height:min(86dvh,900px); padding:20px; margin:auto; color:var(--lg-label); border:1px solid var(--lg-edge)!important; border-radius:25px; background:var(--lg-sheet)!important; box-shadow:inset 0 1px 0 var(--lg-light),var(--lg-shadow); backdrop-filter:blur(28px) saturate(145%); -webkit-backdrop-filter:blur(28px) saturate(145%); overscroll-behavior:contain; }
+#dialog[open],#app .rb dialog.rb-dialog[open] { animation:lg-modal-in .29s var(--lg-smooth) both; }
+#dialog::backdrop,#app .rb dialog.rb-dialog::backdrop { background:var(--lg-overlay); backdrop-filter:none; -webkit-backdrop-filter:none; }
+#dialog>.stack>.row:first-child,#app .rb-dialog-head { position:sticky; top:-21px; background:var(--lg-sheet); z-index:3; padding:7px 0; }
+#dialog #dialog-title { flex:1; min-width:0; }
+#dialog>.stack>.row:first-child .btn { color:var(--lg-tint); background:var(--lg-tint-wash); }
+#dialog .dist-preview-json { max-width:100%; }
+#notice { z-index:7; bottom:22px; color:var(--lg-label); background:var(--lg-sheet); border:1px solid var(--lg-edge); border-radius:17px; box-shadow:var(--lg-shadow); }
+body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
+@keyframes lg-screen { from { opacity:.78; transform:translateY(4px); } to { opacity:1; transform:none; } }
+@keyframes lg-reveal { from { opacity:.74; transform:translateY(-2px); } to { opacity:1; transform:none; } }
+@keyframes lg-modal-in { from { opacity:0; transform:translateY(var(--lg-modal-rise,10px)); } to { opacity:1; transform:translateY(0); } }
+@supports (transition-behavior:allow-discrete) and (overlay:auto) {
+  #dialog.glass,#dialog.glass[open],#app .rb dialog.rb-dialog,#app .rb dialog.rb-dialog[open] { animation:none; transition:opacity .2s ease, transform .25s var(--lg-smooth), display .25s allow-discrete, overlay .25s allow-discrete; }
+  #dialog.glass,#app .rb dialog.rb-dialog { opacity:0; transform:translateY(var(--lg-modal-rise,10px)); }
+  #dialog.glass[open],#app .rb dialog.rb-dialog[open] { opacity:1; transform:translateY(0); }
+  #dialog::backdrop,#app .rb dialog.rb-dialog::backdrop { opacity:0; transition:opacity .22s ease,display .25s allow-discrete,overlay .25s allow-discrete; }
+  #dialog[open]::backdrop,#app .rb dialog.rb-dialog[open]::backdrop { opacity:1; }
+  @starting-style {
+    #dialog.glass[open],#app .rb dialog.rb-dialog[open] { opacity:0; transform:translateY(var(--lg-modal-rise,10px)); }
+    #dialog[open]::backdrop,#app .rb dialog.rb-dialog[open]::backdrop { opacity:0; }
+  }
+}
+
+@media (min-width:761px) {
+  #app .nav button { min-width:64px; }
+  #app .top [data-act=logout] { background:transparent; color:var(--lg-tint); }
+}
+@media (max-width:760px) {
+  /* No backdrop-filter on the ancestor: the bar needs the viewport as its containing block. */
+  #app .top { position:static; z-index:auto; padding-block:calc(8px + env(safe-area-inset-top)) 6px; background:none; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+  #app .top>.row { display:flex; gap:8px; }
+  #app .top [data-act=logout] { margin-inline-start:auto; background:transparent; color:var(--lg-tint); }
+  #app .top .nav { position:fixed; inset:auto max(8px,env(safe-area-inset-right)) calc(9px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); z-index:6; max-width:500px; margin-inline:auto; padding:3px; background:var(--lg-glass); border-radius:29px; box-shadow:inset 0 0 0 1px var(--lg-edge), inset 0 -1px 0 var(--lg-rim),var(--lg-shadow); backdrop-filter:blur(22px) saturate(170%); -webkit-backdrop-filter:blur(22px) saturate(170%); }
+  #app .top .nav>button { flex-direction:column; gap:3px; min-height:50px; padding:4px 0; font-size:10px; line-height:1.2; letter-spacing:0; }
+  #app .lg-nav-icon { width:23px; height:23px; }
+  #app .page { padding-top:11px; padding-bottom:calc(90px + env(safe-area-inset-bottom)); gap:17px; }
+  #app .library-head h1,#app .dist-page .hero h1 { font-size:34px; }
+  #app .page h2,#dialog h2 { font-size:19px; }
+  #app .dist-page { gap:17px; }
+  #app .page .grid[aria-label] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #app .page .grid[aria-label] .stat { padding:13px 14px; }
+  #app .stat:nth-child(odd) { border-inline-start:0; }
+  #app .stat:nth-child(n+3) { border-top:1px solid var(--lg-rule); }
+  #app .log { grid-template-columns:minmax(0,1fr); gap:2px; }
+  #app .dist-main { grid-template-columns:auto minmax(0,1fr); gap:8px; }
+  #app .dist-main .dist-actions { grid-column:1 / -1; }
+  #app .dist-main .dist-actions .btn { min-width:56px; }
+  #app .page .glass.pad.stack:not(.stat)>div:nth-child(2):has(form) { padding-inline:12px; }
+  #dialog.glass,#app .rb dialog.rb-dialog { --lg-modal-rise:32px; position:fixed; inset:auto 0 0; width:min(620px,100vw); max-width:100vw; max-height:calc(94dvh - env(safe-area-inset-top)); margin:auto; padding:20px max(15px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(15px,env(safe-area-inset-left)); border-radius:25px 25px 0 0; }
+  #dialog>.stack>.row:first-child,#app .rb-dialog-head { padding-top:13px; }
+  #dialog>.stack>.row:first-child::before,#app .rb-dialog-head::before { content:""; position:absolute; top:3px; left:50%; transform:translateX(-50%); width:32px; height:4px; border-radius:4px; background:var(--lg-tertiary); opacity:.44; pointer-events:none; }
+  body:has(#app .nav) #notice,#app .rb .rb-flash { bottom:calc(76px + env(safe-area-inset-bottom)); }
+}
+@media (max-width:385px) {
+  #app :is(.library-head,section.glass.pad.stack)>.row { gap:5px; }
+  #app :is(.library-head,section.glass.pad.stack)>.row .btn { font-size:13px; padding-inline:10px; }
+  #app .library-source>summary { padding-inline:12px; gap:8px; }
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  :root { --lg-glass:var(--lg-group); --lg-sheet:var(--lg-group); }
+}
+@media (prefers-reduced-transparency:reduce) {
+  :root { --lg-glass:var(--lg-group); --lg-sheet:var(--lg-group); --lg-puck:var(--lg-control); }
+  #app .top,#app .top .nav,#dialog.glass,#app .rb dialog.rb-dialog { backdrop-filter:none; -webkit-backdrop-filter:none; }
+  #app .top .nav::before { content:none; }
+}
+@media (prefers-contrast:more) {
+  :root { --lg-rule:var(--lg-tertiary); --lg-rim:var(--lg-tertiary); }
+  #app .nav button[aria-current=page] { text-decoration:underline; text-underline-offset:3px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  #app *,#app *::before,#app *::after,#dialog,#dialog *,#dialog::backdrop { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+}
+
+/* PWA: keep controls below the iPhone status bar and Dynamic Island. */
+#app .auth-screen{padding-top:calc(18px + env(safe-area-inset-top));padding-bottom:calc(18px + env(safe-area-inset-bottom));padding-inline:max(6px,env(safe-area-inset-left)) max(6px,env(safe-area-inset-right));}
+@media(display-mode:standalone){html{overscroll-behavior-y:none}#app .startup{margin-top:calc(12dvh + env(safe-area-inset-top))}}

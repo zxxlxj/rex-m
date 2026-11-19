@@ -1,9 +1,11 @@
 {
   "name": "rex-hub",
-  "version": "0.1.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test",
     "dev": "wrangler dev --local --test-scheduled",
@@ -11,10 +13,20 @@
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "npm run db:remote && wrangler deploy"
   },
-  "devDependencies": {"wrangler": "^4.57.0"},
-  "cloudflare": {"bindings": {
-    "SETUP_TOKEN": {"description": "首次初始化令牌；请生成自己的随机值，例如执行 `openssl rand -hex 32`。不要使用固定值。"},
-    "DB": {"description": "保存管理配置、已发布的合集与登录状态。"},
-    "FILE_KV": {"description": "保存上传及镜像托管的模块和图标；不需要开通 R2。"}
-  }}
+  "devDependencies": {
+    "wrangler": "^4.57.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SETUP_TOKEN": {
+        "description": "首次初始化令牌；请生成自己的随机值，例如执行 `openssl rand -hex 32`。不要使用固定值。"
+      },
+      "DB": {
+        "description": "保存管理配置、已发布的合集与登录状态。"
+      },
+      "FILE_KV": {
+        "description": "保存上传及镜像托管的模块和图标；不需要开通 R2。"
+      }
+    }
+  }
 }

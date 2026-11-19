@@ -9,7 +9,7 @@ binding = "ASSETS"
 run_worker_first = true
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "2-57/5 * * * *", "4-59/5 * * * *"]
 
 [[d1_databases]]
 binding = "DB"

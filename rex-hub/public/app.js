@@ -12,7 +12,8 @@ const blank = () => ({sources:[],categories:[],distributions:[],logs:[],settings
 let session, state = blank(), page = 'home', busy = false, timer, returnFocus;
 const expanded = new Set(), openSettings = new Set(), openModules = new Set(), moduleSearch = new Map();
 let sourceSearch = '';
-const tabs = {home:'概览',sources:'来源',distributions:'分发',logs:'日志',settings:'设置'};
+const tabs = {home:'概览',sources:'来源',distributions:'分发',badges:'徽章',logs:'日志',settings:'设置'};
+let unmountBadges;
 const format = x => JSON.stringify(x, null, 2) ?? '—';
 const label = s => s.label || s.url || s.id;
 const normalizeState = obj => ({...Object.fromEntries(['sources','categories','distributions','logs'].map(k => [k, Array.isArray(obj?.[k]) ? obj[k] : []])),origin:obj?.origin,settings:{...defaultSettings,...obj?.settings}});
@@ -50,6 +51,7 @@ function toggle(title, name, value, attrs='') { return `<label class="toggle"><i
 function categorySelect(current, attrs='', placeholder='未分类') { return `<select ${attrs}><option value="">${E(placeholder)}</option>${state.categories.map(c=>`<option value="${E(c.id)}"${selected(c.id===current)}>${E(c.name)}</option>`).join('')}</select>`; }
 function formError() { return '<p class="error" data-error role="alert"></p>'; }
 function renderAuth() {
+  unmountBadges?.();unmountBadges=undefined;
   const setup = !session.initialized;
   app.innerHTML = `<main class="auth-screen"><section class="auth glass pad stack">${brand()}<header><span class="eyebrow">${setup?'FIRST RUN':'WELCOME BACK'}</span><h1>${setup?'初始化控制台':'欢迎回来'}</h1><p>${setup?'输入部署时配置的初始化令牌，并为控制台设置密码。':'使用管理密码登录，管理 REX 来源与分发。'}</p></header><form class="stack" data-form="${setup?'setup':'login'}">${setup?field('初始化令牌',input('token','','type="password" required autocomplete="off"')):''}${field('管理密码',input('password','',`type="password" required autocomplete="${setup?'new-password':'current-password'}"`))}${formError()}${submit(setup?'初始化':'登录控制台')}</form></section></main>`;
 }
@@ -147,13 +149,15 @@ function renderSettings() {
   const defaultsForm=`<form class="stack" data-form="settings"><div class="library-fields">${deliverySelect(defaultDelivery,'name="defaultDelivery"')}${refreshSelect(defaultRefreshMinutes,'name="defaultRefreshMinutes"')}${policySelect(defaultNewPolicy,'name="defaultNewPolicy"')}</div><div class="row"><img class="icon" src="${E(image(defaultIcon))}" alt=""><small>默认分发图标</small></div>${iconFields(defaultIcon)}${formError()}<div class="row">${submit('保存默认设置')}</div></form>`;
   const passwordForm=`<form class="stack" data-form="password">${field('当前密码',input('currentPassword','','type="password" required autocomplete="current-password"'))}${field('新密码',input('newPassword','','type="password" required autocomplete="new-password"'))}${field('确认新密码',input('confirmPassword','','type="password" required autocomplete="new-password"'))}${formError()}<div class="row">${submit('修改密码')}</div></form>`;
   const categories=state.categories.map(c=>`<div class="box row spread"><strong class="wrap grow">${E(c.name)}</strong><div class="row">${btn('重命名','edit-category',`data-id="${E(c.id)}"`)}${btn('删除','delete-category',`data-id="${E(c.id)}"`,'danger')}</div></div>`).join('')||empty('尚未添加分类。');
-  return hero('SETTINGS','设置')+panel('新建默认值',defaultsForm)+panel('修改密码',passwordForm)+panel('分类管理',categories,btn('新建分类','edit-category','','primary'));
+  return hero('SETTINGS','设置')+panel('新建默认值',defaultsForm)+panel('修改密码',passwordForm)+panel('分类管理',categories,btn('新建分类','edit-category','','primary'))+'<small class="release-version">Rex Hub · '+E(document.querySelector('meta[name="application-version"]')?.content||'')+'</small>';
 }
-const renderers = {home:renderHome,sources:renderSources,distributions:renderDistributions,logs:renderLogs,settings:renderSettings};
+const renderers = {home:renderHome,sources:renderSources,distributions:renderDistributions,badges:()=>window.RexBadges.render(),logs:renderLogs,settings:renderSettings};
 function render() {
   if (!session?.authenticated) return renderAuth();
+  unmountBadges?.();unmountBadges=undefined;
   app.innerHTML=`<header class="top"><div class="row spread">${brand()}<nav class="nav" aria-label="主导航">${Object.entries(tabs).map(([key,name])=>`<button type="button" data-act="nav" data-page="${key}"${page===key?' aria-current="page"':''}>${name}</button>`).join('')}</nav>${btn('退出','logout')}</div></header><main class="page stack" id="main">${renderers[page]()}</main>`;
   app.querySelectorAll('[data-filter]').forEach(filterLibrary);
+  if(page==='badges')unmountBadges=window.RexBadges.attach($('[data-rex-badges]',app),{api,toast});
 }
 function go(target) { if (!Object.hasOwn(tabs,target)) return; page=target; render(); window.scrollTo(0,0); const h=$('main h1'); h.tabIndex=-1; h.focus({preventScroll:true}); }
 function showDialog(title, html) {
@@ -359,7 +363,7 @@ async function save(path,payload,message,target){
   if(dialog.open)dialog.close();
   try { await load(); } catch(e) { throw Error(`操作已提交，但刷新状态失败：${errorText(e)}`); }
   if(target)go(target);else render();
-  toast(message);
+  toast(result?.cleanupPending?'来源已撤下，剩余文件将分批清理。':message);
 }
 function setBusy(value){
   busy=value;
@@ -397,7 +401,7 @@ const actions={
   'edit-category'(_,id){categoryForm(state.categories.find(c=>c.id===id));},
   'delete-category'(_,id){const c=state.categories.find(x=>x.id===id);if(c)ask('删除分类',`确定删除「${c.name}」？请检查引用此分类的分发规则。`,'delete-category-confirm',id);},
   'delete-category-confirm'(_,id){return save('category',{id,delete:true},'分类已删除。');},
-  'delete-source'(_,id){const s=state.sources.find(x=>x.id===id);if(s)ask('删除来源',`确定删除「${label(s)}」及其模块？已发布清单不会因此直接更新。`,'delete-source-confirm',id);},
+  'delete-source'(_,id){const s=state.sources.find(x=>x.id===id);if(s)ask('删除来源',`确定删除「${label(s)}」？它的模块将从分发撤下，未被其他来源使用的托管文件会同步清理。`,'delete-source-confirm',id);},
   'replace-source'(_,id){const s=state.sources.find(x=>x.id===id&&!x.url);if(s)importForm(s);},
   'approve-module'(b,id){
     const sourceId=b.dataset.source,s=state.sources.find(x=>x.id===sourceId),m=s?.modules?.find(x=>x.id===id&&x.pending);

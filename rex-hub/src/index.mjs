@@ -1,6 +1,8 @@
 import { session, setup, login, logout, changePassword } from './auth.mjs';
 import { ingest, refresh } from './sources.mjs';
 import { mirrorSource, mirrorDue } from './mirror.mjs';
+import { markFiles, removeSource, removableFiles } from './file-lifecycle.mjs';
+import { badgeApi, badgePublic, badgeTick } from './badges.mjs';
 import { MAX_SOURCES, MAX_ITEMS, MAX_DISTS, fail, randomKey, keyOK, build, blockedRemoval, appendLog, publishedConfig, republish, applyNewPolicy, intervals, recordPublish } from './model.mjs';
 
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
@@ -60,6 +62,23 @@ async function publicDistribution(req,env,path){
   const header={'Content-Type':'text/plain; charset=utf-8','Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer'};
   return new Response(req.method==='HEAD'?null:JSON.stringify(d.published,null,2),{headers:header});
 }
+async function withFileLock(env,fn){
+  const token=uid(), now=Date.now();
+  const r=await env.DB.prepare('UPDATE hub_guard SET token=?,expires=? WHERE id=1 AND expires<=?').bind(token,now+95_000,now).run();
+  if(!r.meta.changes)fail(409,'正在同步或处理文件，请稍后重试');
+  try{return await fn();}finally{await env.DB.prepare('UPDATE hub_guard SET token=NULL,expires=0 WHERE id=1 AND token=?').bind(token).run();}
+}
+async function drainFiles(env,requestOrigin){
+  if(typeof env.FILES?.delete!=='function')return;
+  const initial=(await get(env)).st;if(!initial.fileDeletes?.length)return;
+  return withFileLock(env,async()=>{
+    const {st}=await get(env), removed=[];
+    for(const path of removableFiles(st,originFor(env,st,requestOrigin))){
+      try{await env.FILES.delete(path.slice(1));await env.FILES.delete(path.split('/')[2]);removed.push(path);}catch{break;}
+    }
+    if(removed.length)await change(env,s=>{s.fileDeletes=(s.fileDeletes||[]).filter(p=>!removed.includes(p));});
+  });
+}
 function logLabel(s){return String(s.label||'来源').slice(0,120);}
 async function sync(env,requested,requestOrigin,moduleId){
   const lock=uid(), now=Date.now();
@@ -78,7 +97,7 @@ async function sync(env,requested,requestOrigin,moduleId){
         try{const refreshed=await refresh(s,env,origin);next={...refreshed,modules:applyNewPolicy(s,refreshed.modules)};}
         catch(e){error=e.status&&e.status<500?e.message:'拉取失败，已保留上次有效结果';next={...s,status:error,checkedAt:new Date().toISOString()};}
       }
-      if(origin&&(requested||mirrorDue(next,now)<=now))next=await mirrorSource(next,env,origin,{force:!!requested,moduleId});
+      if(origin&&(requested||mirrorDue(next,now,origin)<=now))next=await mirrorSource(next,env,origin,{force:!!requested,moduleId});
       return {s,next,error};
     }));
     if(!results.length&&!requested)return {ok:true,checked:0,failed:0};
@@ -91,7 +110,7 @@ async function sync(env,requested,requestOrigin,moduleId){
         const added=next.modules.filter(m=>!known.has(m.id));
         if(error)appendLog(current,`「${logLabel(s)}」同步失败：${error}`);
         if(added.length)appendLog(current,`「${logLabel(s)}」新增 ${added.length} 个模块：${added.filter(m=>m.pending).length} 个待审核`);
-        current.sources[index]=next;
+        current.sources[index]=markFiles(next,origin,s);
       }
       if(origin)republish(current,origin);
       return {ok:true,checked:results.length,failed:results.filter(r=>r.error).length};
@@ -121,6 +140,7 @@ async function admin(req,env,url){
   if(req.method==='POST'&&path==='/api/login')return login(req,env,await input(req,16384));
   if(req.method==='POST'&&path==='/api/logout')return logout(req,env,await input(req,16384));
   if(!(await session(req,env)).authenticated)fail(401,'请先登录');
+  if(path==='/api/badges'||path.startsWith('/api/badges/'))return badgeApi(req,env,url,req.method==='POST'?await input(req,10_800_000):undefined);
   if(req.method==='GET'&&path==='/api/state')return json((await get(env)).st);
   if(req.method==='GET'&&path==='/api/preview'){
     const {st}=await get(env);const d=by(st.distributions,url.searchParams.get('id'),'分发');
@@ -139,7 +159,7 @@ async function admin(req,env,url){
     return {ok:true};
   }));
   if(path==='/api/sync')return json(await sync(env,a.id,origin,a.moduleId));
-  if(path==='/api/source'){
+  if(path==='/api/source')return withFileLock(env,async()=>{
     const {st}=await get(env);if(st.sources.length>=MAX_SOURCES&&!a.replaceId)fail(409,'已达到来源上限');
     category(st,a.categoryId);
     if(a.replaceId)by(st.sources,a.replaceId,'来源');
@@ -161,15 +181,20 @@ async function admin(req,env,url){
         for(const m of old.modules){const n=incoming.get(m.id);if(m.paused)incoming.set(m.id,{...m,removed:!n});else if(n)Object.assign(n,{categoryId:m.categoryId,disabled:m.disabled,paused:false});}
         source.modules=[...incoming.values()];if(source.modules.length>MAX_ITEMS)fail(409,'模块超过单个来源上限');
         Object.assign(source,{id:old.id,paused:old.paused,categoryId:source.categoryId||old.categoryId});
-        current.sources[current.sources.indexOf(old)]={...source,edit:uid()};
+        current.sources[current.sources.indexOf(old)]=markFiles({...source,edit:uid()},originFor(env,current,origin),old);
       }else{
         if(current.sources.length>=MAX_SOURCES)fail(409,'已达到来源上限');
         if(source.url&&current.sources.some(s=>s.url===source.url))fail(409,'这个来源地址已添加');
-        current.sources.push({...source,edit:uid()});
+        current.sources.push(markFiles({...source,edit:uid()},originFor(env,current,origin)));
       }
       appendLog(current,`已保存来源「${logLabel(source)}」：${source.modules.length} 个模块`);
       return {ok:true,source};
     }),201);
+  });
+  if(path==='/api/source/update'&&a.delete===true){
+    await change(env,st=>{const site=originFor(env,st,origin);removeSource(st,by(st.sources,a.id,'来源'),site);republish(st,site);appendLog(st,'已删除来源并撤下其分发模块');});
+    let pending=false;try{await drainFiles(env,origin);}catch{pending=true;}
+    return json({ok:true,cleanupPending:pending||(await get(env)).st.fileDeletes?.length>0});
   }
   return json(await change(env,st=>{
     st.origin ||= origin;
@@ -186,6 +211,7 @@ async function admin(req,env,url){
       }
     }else if(path==='/api/module/update'){
       const s=by(st.sources,a.sourceId,'来源'),m=by(s.modules,a.id,'模块');
+      markFiles(s,originFor(env,st,origin));
       if(typeof a.paused==='boolean')m.paused=a.paused;
       if(typeof a.disabled==='boolean')m.disabled=a.disabled;
       if(a.approve===true)m.pending=false;
@@ -230,7 +256,7 @@ function fileBindings(env){
     async put(key,bytes){
       if(await kv.get(key,'arrayBuffer')!==null)return;
       try{await kv.put(key,bytes instanceof ArrayBuffer?bytes:bytes.slice().buffer);}catch(e){if(await kv.get(key,'arrayBuffer')===null)throw e;}
-    },get,head:get
+    },get,head:get,delete:key=>kv.delete(key)
   }};
 }
 export default {
@@ -240,6 +266,7 @@ export default {
       const url=new URL(req.url), path=url.pathname;
       if(path.startsWith('/api/'))return await admin(req,env,url);
       if(!['GET','HEAD'].includes(req.method))return new Response('Method not allowed',{status:405});
+      if(path==='/badge.json'||path.startsWith('/badge-assets/'))return await badgePublic(req,env,url);
       if(path.startsWith('/s/'))return await publicDistribution(req,env,path);
       if(path.startsWith('/m/')){
         const m=/^\/m\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/([A-Za-z0-9_][A-Za-z0-9_.-]{0,159})\.js$/.exec(path);
@@ -260,5 +287,9 @@ export default {
       return response;
     }catch(e){if(e?.status>=400&&e.status<500)return json({error:e.message,...(e.code==='confirm_publish'?{code:e.code}:{})},e.status);console.error('Worker request failed',e?.name);return json({error:'服务暂不可用，请检查绑定或稍后重试'},500);}
   },
-  async scheduled(_event,env,ctx){ctx.waitUntil(sync(fileBindings(env),undefined,undefined).catch(e=>console.error('Cron sync failed',e?.name,e?.status||'')));}
+  async scheduled(event,env,ctx){
+    env=fileBindings(env);
+    const task=event.cron==='4-59/5 * * * *'?drainFiles(env):event.cron==='2-57/5 * * * *'?badgeTick(env):sync(env,undefined,undefined);
+    ctx.waitUntil(task.catch(e=>console.error('Cron task deferred',e?.name,e?.status||'')));
+  }
 };

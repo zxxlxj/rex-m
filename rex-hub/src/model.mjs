@@ -29,15 +29,16 @@ export function build(state,d,origin){
   }
   let items=Array.from(selected.values());
   if(d.order==='title')items.sort((a,b)=>a.m.title.localeCompare(b.m.title,'zh-CN')||a.r.localeCompare(b.r));
-  const missingMirrors=[], files=Object.create(null);
+  const missingMirrors=[], files=Object.create(null), refs=Object.create(null);
   const widgets=items.map(({m,s})=>{
     const mirror=deliveryMode(s,m,state.settings?.defaultDelivery)==='mirror' && !m.url.startsWith(`${origin}/files/`) && !m.url.startsWith(`${origin}/m/`);
     const file=mirror?m.mirror:null;
     if(mirror&&!file?.url)missingMirrors.push({id:m.id,title:m.title,source:s.label});
     if(file?.url)files[m.id]=file.url;
+    refs[m.id]=ref(s,m);
     return {id:m.id,title:m.title,description:m.description||'',requiredVersion:file?.requiredVersion||m.requiredVersion,version:file?.version||m.version,author:m.author||'',icon:m.icon||'',url:mirror?(file?.url?`${origin}/m/${encodeURIComponent(d.key)}/${encodeURIComponent(m.id)}.js`:''):m.url};
   });
-  return {manifest:{name:d.title,title:d.title,description:d.description||'',icon,logo:icon,widgets},files,missingMirrors,conflicts,blocked:[...unresolved]};
+  return {manifest:{name:d.title,title:d.title,description:d.description||'',icon,logo:icon,widgets},files,refs,missingMirrors,conflicts,blocked:[...unresolved]};
 }
 export function blockedRemoval(old,next){
   if(!old?.widgets?.length)return false;
@@ -46,9 +47,9 @@ export function blockedRemoval(old,next){
   return gone===old.widgets.length || (gone>=3 && gone*2>=old.widgets.length);
 }
 export function appendLog(st,message){st.logs.unshift({time:new Date().toISOString(),message});st.logs.length=Math.min(st.logs.length,60);}
-export function publishedConfig(d){const {published,publishedAt,active,publishedFiles,publishWarning,...config}=d;return structuredClone(config);}
+export function publishedConfig(d){const {published,publishedAt,active,publishedFiles,publishedRefs,publishWarning,...config}=d;return structuredClone(config);}
 export function recordPublish(d,next){
-  d.published=next.manifest;d.publishedFiles=next.files;d.publishedAt=new Date().toISOString();d.publishWarning='';
+  d.published=next.manifest;d.publishedFiles=next.files;d.publishedRefs=next.refs;d.publishedAt=new Date().toISOString();d.publishWarning='';
 }
 export function republish(st,origin){
   for(const d of st.distributions){
@@ -60,7 +61,7 @@ export function republish(st,origin){
       d.publishWarning=reason;continue;
     }
     d.publishWarning='';
-    if(JSON.stringify(d.published)!==JSON.stringify(next.manifest)||JSON.stringify(d.publishedFiles||{})!==JSON.stringify(next.files)){
+    if(JSON.stringify(d.published)!==JSON.stringify(next.manifest)||JSON.stringify(d.publishedFiles||{})!==JSON.stringify(next.files)||JSON.stringify(d.publishedRefs||{})!==JSON.stringify(next.refs)){
       recordPublish(d,next);
       appendLog(st,`自动更新「${d.active.title}」：${next.manifest.widgets.length} 个模块`);
     }

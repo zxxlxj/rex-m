@@ -1,0 +1,38 @@
+CREATE TABLE IF NOT EXISTS badge_packs (
+  id TEXT PRIMARY KEY NOT NULL,
+  alias TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('link','host')),
+  url TEXT NOT NULL,
+  base TEXT NOT NULL,
+  groups INTEGER NOT NULL,
+  filters INTEGER NOT NULL,
+  assets INTEGER NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  failed INTEGER NOT NULL DEFAULT 0,
+  cursor INTEGER NOT NULL DEFAULT 0,
+  retry_cursor INTEGER,
+  error TEXT,
+  generation INTEGER NOT NULL DEFAULT 1,
+  highwater INTEGER NOT NULL DEFAULT 0,
+  cleanup INTEGER NOT NULL DEFAULT 0,
+  cleanup_cursor INTEGER NOT NULL DEFAULT 0,
+  deleting INTEGER NOT NULL DEFAULT 0,
+  created INTEGER NOT NULL,
+  touched INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS badge_failures (
+  pack TEXT NOT NULL REFERENCES badge_packs(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL,
+  error TEXT NOT NULL,
+  PRIMARY KEY (pack, slot)
+);
+CREATE TABLE IF NOT EXISTS badge_state (
+  id INTEGER PRIMARY KEY CHECK (id=1),
+  active_id TEXT,
+  lock_token TEXT,
+  lock_until INTEGER NOT NULL DEFAULT 0,
+  quota_day TEXT NOT NULL DEFAULT '',
+  puts INTEGER NOT NULL DEFAULT 0,
+  deletes INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO badge_state (id) VALUES (1);
