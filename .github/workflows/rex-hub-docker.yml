@@ -18,10 +18,16 @@ concurrency:
   cancel-in-progress: true
 jobs:
   image:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -31,8 +37,34 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: rex-hub
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/rex-hub:latest
-            ghcr.io/${{ github.repository_owner }}/rex-hub:sha-${{ github.sha }}
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: ghcr.io/${{ github.repository_owner }}/rex-hub:${{ github.sha }}-${{ matrix.arch }}
+      - name: Smoke test and push
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/rex-hub:${{ github.sha }}-${{ matrix.arch }}
+        run: |
+          export PUBLIC_ORIGIN=http://localhost:18080
+          export SETUP_TOKEN=$(openssl rand -hex 32)
+          docker run -d --name rex-smoke -p 127.0.0.1:18080:8080 -e PUBLIC_ORIGIN -e SETUP_TOKEN "$IMAGE"
+          trap 'docker logs rex-smoke; docker rm -f rex-smoke' EXIT
+          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 "$PUBLIC_ORIGIN/healthz"
+          python3 rex-hub/docker/smoke.py
+          docker push "$IMAGE"
+  publish:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multi-platform tags
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/rex-hub
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("rex-hub/docker/Cargo.toml","rb"))["package"]["version"])')
+          docker buildx imagetools create -t "$IMAGE:latest" -t "$IMAGE:$VERSION" -t "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:$GITHUB_SHA-amd64" "$IMAGE:$GITHUB_SHA-arm64"
