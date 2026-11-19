@@ -6,17 +6,17 @@
 
 连接你自行部署的媒体服务，获取资源并播放。
 
-REX 版当前版本 **2.2.0**。影视分类需要服务器支持资源库协议 3。
+同一个 REX 集合包含 **MANIA 2.2.1** 和 **RAVE 音乐 1.0.0**，两个模块各有自己的设置。影视分类需要服务器支持资源库协议 3。
 
-## 导入模块
+## 导入集合
 
-通过 **[GitHub 一键导入](https://rexnow.tv/widget?url=https%3A%2F%2Fraw.githubusercontent.com%2Fzxxlxj%2Frex-m%2Fmain%2Fdocs%2Fplugin-platform%2Fexamples%2Fmania%2Fmania.rex.js)**，或复制集合地址：
+复制以下地址，在 REX 中导入集合。已导入过这个集合的用户可以刷新集合获取两个模块。
 
 ```text
 https://raw.githubusercontent.com/zxxlxj/rex-m/main/mania.rex
 ```
 
-## 开始使用
+## MANIA 影视
 
 1. 填写 **自部署服务器地址**和 **API**。
 2. 打开“获取播放账号”，点击选择主账号或备用账号。
@@ -24,12 +24,11 @@ https://raw.githubusercontent.com/zxxlxj/rex-m/main/mania.rex
 
 资源库只展示自部署服务中已缓存的媒体；播放账号和模块说明在各自入口管理。
 
-## 2.2.0 更新
+## RAVE 音乐
 
-- 新增「RAVE 音乐」，支持浏览和搜索专辑、歌曲。
-- 打开专辑可选曲，歌曲支持播放原始音频。
+在 REX 的模块列表打开「RAVE 音乐 → 设置」，填写 RAVE 媒体服务器地址和有音乐权限的账号。密码也可用该账号的 Subsonic 令牌替代。地址包含媒体端口及反向代理前缀，末尾无需添加 `/rest`。
 
-在 REX 资源库添加「RAVE 音乐」，填写 RAVE 媒体服务器地址和有音乐权限的账号。密码也可用该账号的 Subsonic 令牌替代。地址包含媒体端口及反向代理前缀，末尾无需添加 `/rest`。旧账号若提示需要准备令牌认证，先登录一次 RAVE 网页再刷新列表。
+配置一次即可使用「专辑」「歌曲」和 REX 搜索。打开专辑可选曲，歌曲支持播放原始音频。旧账号若提示需要准备令牌认证，先登录一次 RAVE 网页再刷新列表。
 
 ## 2.1.1 更新
 

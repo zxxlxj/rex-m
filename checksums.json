@@ -1,12 +1,13 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "format": "REXENC",
   "payload_comments": 0,
   "sha256": {
-    ".gitignore": "ad3eb81b1f676763ded3edebb0077830335a36982d9789ff0deebb106f8e9b07",
-    "README.md": "b24234d9fc97c4f1e62c6797114ffa84a00aab27ed6bf57a6673fdb396d310bd",
+    ".gitignore": "d0852f80f838fb5f3768ba5a4c555893e55142a89fe3982e9696b8f4d31c8c9d",
+    "README.md": "35ae7602132e5fcf8325c3d92ab56c68c23fcb31b40bfb444bd670022eb8fe76",
     "assets/mania.png": "021e121b5e196e24d0e348de29a5b7c55c6d32e13c1fdf373217de79bc4b42c8",
-    "docs/plugin-platform/examples/mania/mania.rex.js": "2b89b411b7c1bf1247a5e39a683e9a77b881a62e4b7c7df029737699ee89fdd0",
-    "mania.rex": "052ac5bdc80231196ae3bd1310dea6225340b2da814213da2250c9af45e3d39a"
+    "docs/plugin-platform/examples/mania/mania.rex.js": "94017b6193615883bff3ca7206e50342f8d87f68a5fdb6e6308e02278696f64c",
+    "docs/plugin-platform/examples/rave-music/rave-music.rex.js": "34482c3b675f5edfe54f2c36c26de7694360a61f52147cd43a5d4bf1b59604ae",
+    "mania.rex": "f0ad86e75e0b848c4ce80a988a85a0c802460b928012bd105097dcb0cafc8632"
   }
 }

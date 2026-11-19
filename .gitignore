@@ -6,6 +6,7 @@
 !checksums.json
 !assets/mania.png
 !docs/plugin-platform/examples/mania/mania.rex.js
+!docs/plugin-platform/examples/rave-music/rave-music.rex.js
 !xijing-club/**
 !/prism/mania.prism
 !/prism/mania.prs
