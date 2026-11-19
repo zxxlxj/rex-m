@@ -1,5 +1,5 @@
-const CACHE='rex-hub-shell-0.0.2';
-const SHELL=['/','/app.js','/badge'+'s.js','/liquid.js','/style.css','/distributions.css','/badges.css','/liquid.css','/rex-mark.png','/manifest.webmanifest','/pwa-180.png','/pwa-192.png','/pwa-512.png','/pwa-maskable.png'];
+const CACHE='rex-hub-shell-0.0.2-hub2';
+const SHELL=['/','/app.js','/badge'+'s.js','/liquid.js','/style.css','/distributions.css','/badges.css','/liquid.css','/rex-mark.png','/hub-mark.png','/manifest.webmanifest','/pwa-180.png','/pwa-192.png','/pwa-512.png','/pwa-maskable.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('rex-hub-shell-')&&key!==CACHE)await caches.delete(key);await self.clients.claim();})()));
 self.addEventListener('fetch',event=>{

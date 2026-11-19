@@ -6,7 +6,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;'
 const E = esc;
 const checked = v => v ? ' checked' : '';
 const selected = v => v ? ' selected' : '';
-const mark = './rex-mark.png';
+const mark = './hub-mark.png?v=hub2';
 const defaultSettings = {defaultRefreshMinutes:30,defaultDelivery:'link',defaultIcon:'',defaultNewPolicy:'review'};
 const blank = () => ({sources:[],categories:[],distributions:[],logs:[],settings:{...defaultSettings}});
 let session, state = blank(), page = 'home', busy = false, timer, returnFocus;
