@@ -136,19 +136,24 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   }
   const indicator=document.createElement('div');indicator.className='lg-pull';indicator.setAttribute('role','status');indicator.hidden=true;
   const dial=document.createElement('div');dial.className='lg-pull-dial';dial.setAttribute('aria-hidden','true');
-  const icon=document.createElement('span');icon.className='lg-pull-icon';dial.append(icon);
+  const sprite=new Image();sprite.decoding='async';
+  sprite.src=new URL('./pull-rex-collection.png',document.baseURI).href;
+  const canvas=document.createElement('canvas');canvas.width=36;canvas.height=36;
+  const pixels=canvas.getContext('2d');
+  let drawn=-1;
+  function drawRex(){if(pixels&&sprite.complete&&sprite.naturalWidth===36*colors.length&&mascotIndex>=0&&drawn!==mascotIndex){pixels.clearRect(0,0,36,36);pixels.drawImage(sprite,mascotIndex*36,0,36,36,0,0,36,36);drawn=mascotIndex;}}
+  sprite.addEventListener('load',drawRex);
+  if(sprite.decode)void sprite.decode().then(drawRex,()=>{});
+  canvas.className='lg-pull-icon';dial.append(canvas);
   const label=document.createElement('span');label.className='lg-pull-copy';indicator.append(dial,label);document.body.append(indicator);
-  const colors=['#4299ef','#36a775','#687ee0','#9c65d6','#df5281','#eb5077','#b47b20','#229cb3','#79962d','#5971da','#b87836','#159986'];
-  let mascotIndex=-1;
+  const colors=['#4299ef','#36a775','#687ee0','#9c65d6','#df5281','#eb5077','#b47b20','#229cb3','#79962d','#5971da','#b87836','#159986','#6491c9','#5cae8b','#b978ea','#d34b74','#df9e35','#49aeda','#da606c','#7968ce','#2ba395','#cc7b4c','#8ca74e','#e48baa'];
+  let mascotIndex=Math.floor(Math.random()*colors.length);
   function show(y,text,phase){
     indicator.hidden=false;if(indicator.dataset.phase!==phase)indicator.dataset.phase=phase;
     indicator.style.setProperty('--pull',`${y}px`);
     indicator.style.setProperty('--pull-progress',`${Math.min(1,y/limit)*360}deg`);
-    if(!icon.dataset.rex||Number(icon.dataset.rex)!==mascotIndex){
-      icon.dataset.rex=String(mascotIndex);
-      icon.style.setProperty('--rex-frame',`${100*mascotIndex/(colors.length-1)}%`);
-      indicator.style.setProperty('--rex-color',colors[mascotIndex]);
-    }
+    indicator.style.setProperty('--rex-color',colors[mascotIndex]);
+    drawRex();
     if(label.textContent!==text)label.textContent=text;
     label.hidden=!text;
   }

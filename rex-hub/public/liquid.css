@@ -272,9 +272,16 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 
 .lg-pull{--pull-ring:var(--rex-color,var(--lg-tint))}
 .lg-pull-dial{width:62px;height:62px}
-.lg-pull-dial>.lg-pull-icon{display:block;width:42px;height:42px;background:url('./pull-rex.png') var(--rex-frame,0%) 0/1200% 100% no-repeat;image-rendering:pixelated}
+.lg-pull-dial>.lg-pull-icon{display:block;width:44px;height:44px;image-rendering:pixelated}
 .lg-pull[data-phase=loading] .lg-pull-icon{animation:lg-rex-step .52s steps(2,jump-none) infinite}
 .lg-pull[data-phase=done] .lg-pull-icon{animation:lg-rex-hop .38s var(--lg-spring) both}
 @keyframes lg-rex-step{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 @keyframes lg-rex-hop{0%,100%{transform:none}45%{transform:translateY(-6px) rotate(-8deg)}}
 @media(prefers-reduced-motion:reduce){.lg-pull .lg-pull-icon{animation:none!important}}
+
+:is(#app,#dialog) .rex-icon-picker{border:1px solid var(--lg-rule);border-radius:14px;padding:0 10px;background:var(--lg-inset)}
+:is(#app,#dialog) .rex-icon-picker>summary{min-height:44px;color:var(--lg-label);padding-block:10px}
+.rex-icon-picker>summary small{margin-inline-start:6px;color:var(--lg-tint)}
+.rex-icon-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(46px,1fr));gap:6px;padding-bottom:9px;max-height:228px;overflow:auto;overscroll-behavior:contain}
+.rex-icon-grid>button{display:grid;place-items:center;min-width:0;min-height:48px;padding:2px;border:1px solid transparent;border-radius:10px;background:var(--lg-group);transition:transform .18s,border-color .18s}
+.rex-icon-grid>button[aria-pressed=true]{border-color:var(--lg-tint);background:var(--lg-tint-wash)}.rex-icon-grid>button:active{transform:scale(.91)}.rex-icon-grid img{width:42px;height:42px;max-width:100%;object-fit:contain;image-rendering:pixelated}

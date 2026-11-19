@@ -190,7 +190,9 @@ function importForm(source) {
   showDialog(editing?'重新上传来源':'导入来源',`<form class="stack" data-form="import" data-id="${E(source?.id)}">${editing?'<input type="hidden" name="method" value="files">':field('导入方式','<select name="method" data-change="import-method"><option value="url">从 URL 导入</option><option value="files">从文件导入</option></select>')}<div class="stack" data-import="url"${editing?' hidden':''}>${field('订阅或模块地址',input('url','',`type="url" ${editing?'disabled':'required'} placeholder="https://…"`))}${editing?'':`<div class="library-fields">${deliverySelect(state.settings.defaultDelivery,'name="delivery"')}${refreshSelect(state.settings.defaultRefreshMinutes,'name="refreshMinutes"')}</div>`}</div><div class="stack" data-import="files"${editing?'':' hidden'}>${field('模块文件（可多选）',`<input name="files" type="file" accept=".js,.rex.js,.rex" multiple ${editing?'required':'disabled'}>`)}</div>${editing?'':field('分类',categorySelect('', 'name="categoryId"'))}<details><summary>高级选项</summary><div class="stack">${field('相对地址的基础 URL（可选）',input('baseUrl','','type="url" placeholder="https://…/"'))}${[['id','模块 ID'],['title','模块标题'],['version','模块版本'],['requiredVersion','所需 REX 版本'],['author','作者'],['icon','模块图标 URL']].map(([k,t])=>field(`${t}（可选）`,input(k))).join('')}</div></details>${formError()}${submit(editing?'替换文件':'导入')}</form>`);
 }
 function iconFields(icon) {
-  return field('图标 URL（可选）',input('icon',icon,'placeholder="https://… 或 /…"'))+field('或上传图标（优先使用）','<input name="iconFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">');
+  const chosen=String(icon||'').match(/(?:^|\/)rex-dino-(\d\d)\.png$/)?.[1];
+  const gallery=`<details class="rex-icon-picker"><summary>选择像素霸王龙 <small data-rex-selected>${chosen?`已选 ${chosen} 号`:''}</small></summary><div class="rex-icon-grid" role="group" aria-label="像素霸王龙图标">${Array.from({length:24},(_,i)=>{const n=String(i+1).padStart(2,'0');return `<button type="button" aria-label="霸王龙 ${n} 号" aria-pressed="${chosen===n}" data-rex-icon="${n}"><img src="/rex-dino-${n}.png" alt="" width="42" height="42" loading="lazy"></button>`;}).join('')}</div></details>`;
+  return gallery+field('图标 URL（可选）' ,input('icon',icon,'placeholder="https://… 或 /…"'))+field('或上传图标（优先使用）','<input name="iconFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">');
 }
 function checks(title, name, opts, current, grouped=false) {
   const chosen=new Set(current||[]);
@@ -541,7 +543,22 @@ async function boot(throwError=false){
     app.innerHTML=`<main class="startup glass stack" role="alert"><h2>无法连接控制台</h2><p>${E(errorText(e))}</p>${btn('重试','retry','','primary')}</main>`;
   }
 }
-app.addEventListener('rex:pull-refresh',event=>{
+document.addEventListener('click',event=>{
+  const button=event.target.closest?.('button[data-rex-icon]');if(!button||busy)return;
+  const form=button.closest('form'), n=button.dataset.rexIcon;
+  if(!form||!n)return;
+  form.elements.icon.value=`/rex-dino-${n}.png`;
+  form.elements.iconFile.value='';
+  for(const item of form.querySelectorAll('[data-rex-icon]'))item.setAttribute('aria-pressed',String(item===button));
+  $('[data-rex-selected]',form).textContent=`已选 ${n} 号`;
+});
+document.addEventListener('input',event=>{
+  const field=event.target, form=field.form;
+  if(!form||!['icon','iconFile'].includes(field.name))return;
+  for(const item of form.querySelectorAll('[data-rex-icon]'))item.setAttribute('aria-pressed','false');
+  const status=$('[data-rex-selected]',form);if(status)status.textContent='';
+});
+app.addEventListener('rex:pull-refresh' ,event=>{
   if(busy||!session?.authenticated||document.querySelector('dialog[open]'))return;
   event.detail.pending=(async()=>{
     try{

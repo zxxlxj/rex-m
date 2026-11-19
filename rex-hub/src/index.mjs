@@ -24,7 +24,7 @@ function by(rows,id,label){const found=rows.find(r=>r.id===id);if(!found)fail(40
 function category(st,id){return id?by(st.categories,id,'分类').id:'';}
 function list(x,max=500){if(x==null)return [];if(!Array.isArray(x)||x.length>max||x.some(v=>typeof v!=='string'||v.length>300))fail(400,'选择项格式无效');return [...new Set(x)];}
 const originFor=(env,st,origin)=>env.PUBLIC_ORIGIN?.replace(/\/$/,'')||st.origin||origin;
-function validIcon(s,origin){if(!s)return '';let u;try{u=new URL(s,origin);}catch{fail(400,'图标 URL 不合法');}if(!['https:'].includes(u.protocol)&&u.origin!==origin||u.username||u.password||u.hash)fail(400,'图标需使用 HTTPS');if(u.origin===origin&&!/^\/(rex-mark\.png|icons\/[a-f0-9]{64}\.(png|jpg|gif|webp))$/.test(u.pathname))fail(400,'站内图标 URL 不合法');return u.href;}
+function validIcon(s,origin){if(!s)return '';let u;try{u=new URL(s,origin);}catch{fail(400,'图标 URL 不合法');}if(!['https:'].includes(u.protocol)&&u.origin!==origin||u.username||u.password||u.hash)fail(400,'图标需使用 HTTPS');if(u.origin===origin&&!/^\/(rex-mark\.png|rex-dino-(?:0[1-9]|1[0-9]|2[0-4])\.png|icons\/[a-f0-9]{64}\.(png|jpg|gif|webp))$/.test(u.pathname))fail(400,'站内图标 URL 不合法');return u.href;}
 async function read(req,cap){
   if(Number(req.headers.get('Content-Length'))>cap)fail(413,'请求内容过大');
   if(!req.body)return new Uint8Array();
