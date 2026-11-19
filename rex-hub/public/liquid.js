@@ -72,17 +72,30 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     '就差最后一步：松手。','准备好了，放手一搏。','再拽也没有隐藏关卡。大概。','拉得够远了，回来吧。',
     '检测到超认真下拉，准许松手。','别客气，松手就是。','刷新组已到齐，请松手。','请放开屏幕，它想刷新。',
     '一拉一松，配合愉快。','这里不是拔河比赛，可以松了。','进度满格，手指自由。','已经拉满，不必加班。',
-    '恭喜解锁：松手刷新。','松手吧，屏幕不会跑。','这一单我来处理，请松手。','停停停，正好可以刷新！'
+    '恭喜解锁：松手刷新。','松手吧，屏幕不会跑。','这一单我来处理，请松手。','停停停，正好可以刷新！',
+    '仓库卷帘门已开，松手收货！','库存盘点完毕，就等你放手。','刷新件已打包，请松手签收。','再拉就要按体积收费了，松手！',
+    '手指的绩效已达标，请松手。','拇指辛苦了，申请换班。','本次下拉不计步，可以松了。','再拉就要给拇指发加班费了。',
+    '刷新火箭倒数：三、二、松手！','已经在轨道上了，请松手。','不是发射失败，是你还没松手。','控制台呼叫拇指：允许松手。',
+    '别拉到明天，今天就能刷新。','你负责松手，我负责假装很忙。','松手领一份刚出炉的数据。','小心，下面没有第二层彩蛋。',
+    '小恐龙在门口等你松手。','小恐龙说：我的尾巴不是拉杆。','小恐龙举牌：可以了！','小恐龙已系好安全带，松手吧。',
+    '到站了，本次不提供续拉。','电梯到了，请放开开门键。','到站不停？那也得先松手。','车门已开，请拇指先下。',
+    '听劝，松手。','拉得漂亮，收工！','我数到三。三！','放手吧，不扣分。',
+    '刷新正在等一个松手的机会。','别和进度条较劲，它已经满了。','请释放这只被扣押的屏幕。','你已经拉出了刷新键的自尊。'
   ];
   function nextNote(){
     if(!pool.length){pool=notes.slice();for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}if(pool.at(-1)===last)[pool[0],pool[pool.length-1]]=[pool.at(-1),pool[0]];}
     last=pool.pop();return last;
   }
   const indicator=document.createElement('div');indicator.className='lg-pull';indicator.setAttribute('role','status');indicator.hidden=true;
-  const label=document.createElement('span');indicator.append(label);document.body.append(indicator);
+  const icon=document.createElement('span');icon.className='lg-pull-icon';icon.setAttribute('aria-hidden','true');
+  const label=document.createElement('span');label.className='lg-pull-copy';indicator.append(icon,label);document.body.append(indicator);
+  const glyphs=['👋','🛎️','✨','🎈','📦','🧤','🚀','🪄','🦖','🚋','🎯','🔓'];
+  function armedIcon(text){const i=notes.indexOf(text);return i<32?glyphs[i%8]:glyphs[4+Math.floor((i-32)/4)];}
   function show(y,text,phase){
     indicator.hidden=false;if(indicator.dataset.phase!==phase)indicator.dataset.phase=phase;
     indicator.style.setProperty('--pull',`${y}px`);
+    const glyph=phase==='armed'?armedIcon(text):phase==='done'?'✓':phase==='pulling'?'↓':'';
+    if(icon.textContent!==glyph)icon.textContent=glyph;
     if(label.textContent!==text)label.textContent=text;
   }
   function reset(){touch=null;distance=0;note='';indicator.hidden=true;delete indicator.dataset.phase;}

@@ -248,3 +248,5 @@ body:has(#dialog[open],#app .rb-dialog[open]) { overflow:hidden; }
 @keyframes lg-pull-settle{from{opacity:.7;transform:translateY(-3px) scale(.92)}to{opacity:1;transform:none}}
 @keyframes lg-pull-breathe{from{opacity:.65}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.lg-pull>span{animation:none!important}}
+
+.lg-pull{display:flex;align-items:center;gap:7px}.lg-pull[hidden]{display:none!important}.lg-pull>.lg-pull-icon{width:18px;flex:none;text-align:center;font-size:15px;line-height:1;color:var(--lg-tint)}.lg-pull[data-phase=done]>.lg-pull-icon{color:var(--lg-good);font-weight:800}.lg-pull[data-phase=loading]>.lg-pull-icon{width:12px;height:12px;border:2px solid var(--lg-rim);border-top-color:var(--lg-tint);border-radius:50%;animation:lg-pull-spin .65s linear infinite}.lg-pull[data-phase=loading]>.lg-pull-copy{animation:none}@keyframes lg-pull-spin{to{transform:rotate(360deg)}}
