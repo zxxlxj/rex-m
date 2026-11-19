@@ -138,14 +138,17 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   const dial=document.createElement('div');dial.className='lg-pull-dial';dial.setAttribute('aria-hidden','true');
   const icon=document.createElement('span');icon.className='lg-pull-icon';dial.append(icon);
   const label=document.createElement('span');label.className='lg-pull-copy';indicator.append(dial,label);document.body.append(indicator);
-  const mascots=['🦖','🐙','👻','🐈','🦝','🛸','🐸','📦','🦆','🤖','🦥','🐧'];
+  const colors=['#4299ef','#36a775','#687ee0','#9c65d6','#df5281','#eb5077','#b47b20','#229cb3','#79962d','#5971da','#b87836','#159986'];
   let mascotIndex=-1;
   function show(y,text,phase){
     indicator.hidden=false;if(indicator.dataset.phase!==phase)indicator.dataset.phase=phase;
     indicator.style.setProperty('--pull',`${y}px`);
     indicator.style.setProperty('--pull-progress',`${Math.min(1,y/limit)*360}deg`);
-    const glyph=phase==='done'?'✓':mascots[mascotIndex];
-    if(icon.textContent!==glyph)icon.textContent=glyph;
+    if(!icon.dataset.rex||Number(icon.dataset.rex)!==mascotIndex){
+      icon.dataset.rex=String(mascotIndex);
+      icon.style.setProperty('--rex-frame',`${100*mascotIndex/(colors.length-1)}%`);
+      indicator.style.setProperty('--rex-color',colors[mascotIndex]);
+    }
     if(label.textContent!==text)label.textContent=text;
     label.hidden=!text;
   }
@@ -155,7 +158,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     if(e.target.closest?.('button,a,input,textarea,select,summary,[contenteditable],.library-modules,.activity-list,.dist-results'))return;
     for(let el=e.target;el instanceof Element&&el!==document.body;el=el.parentElement){if(el.scrollHeight>el.clientHeight+2&&/auto|scroll/.test(getComputedStyle(el).overflowY))return;}
     const p=e.touches[0];touch={x:p.clientX,y:p.clientY,id:p.identifier};
-    mascotIndex=(mascotIndex+1+Math.floor(Math.random()*(mascots.length-1)))%mascots.length;
+    const slot=Math.floor(Math.random()*(colors.length-(mascotIndex<0?0:1)));
+    mascotIndex=mascotIndex<0||slot<mascotIndex?slot:slot+1;
   },{passive:true});
   window.addEventListener('touchmove',e=>{
     if(!touch)return;
