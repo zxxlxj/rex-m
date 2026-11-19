@@ -1,0 +1,7 @@
+.git
+.wrangler
+node_modules
+docker/target
+.env*
+.dev.vars*
+data
