@@ -122,3 +122,11 @@
 .rb-presets .rb-btn small{font-size:11px;color:var(--rb-muted)}
 .rb-presets .rb-danger small{color:inherit}
 @media(pointer:coarse){.rb .rb-presets .rb-btn{min-height:44px}}
+
+.rb-columns{align-items:start}
+.rb-preview>summary.rb-preview-toggle{display:flex;justify-content:space-between;align-items:center;min-height:44px;padding-block:5px;cursor:pointer;list-style:none;font-weight:750}
+.rb-preview>summary::-webkit-details-marker{display:none}
+.rb-preview>summary small{font-weight:500;margin-inline-start:6px}
+.rb-preview>summary>svg{flex:none;transition:transform .2s ease}
+.rb-preview[open]>summary>svg{transform:rotate(180deg)}
+.rb-preview:not([open])>summary{margin-bottom:0}

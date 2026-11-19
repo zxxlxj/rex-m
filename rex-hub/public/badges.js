@@ -40,10 +40,10 @@ function render() {
     <section class="rb-glass rb-live" aria-labelledby="rb-live-title"><div class="rb-emblem">${glyph('badge')}</div><div class="rb-live-text"><p class="rb-kicker" id="rb-live-title">当前使用</p><h2 data-rb-live>正在读取…</h2><code data-rb-url></code></div><div class="rb-actions">${b('复制订阅链接','copy',{icon:'copy'})}${b('清除启用','clear',{kind:'quiet',disabled:true})}</div></section>
     <div class="rb-columns">
       <section class="rb-glass rb-panel" aria-labelledby="rb-list-title"><header class="rb-section-head"><h2 id="rb-list-title">徽章包</h2><span class="rb-counter" data-rb-count>—</span></header><div data-rb-list><p class="rb-empty">正在读取徽章包…</p></div></section>
-      <section class="rb-glass rb-panel rb-preview" aria-labelledby="rb-preview-title" data-rb-preview><header class="rb-section-head"><div><h2 id="rb-preview-title" tabindex="-1">预览</h2><p class="rb-muted" data-rb-preview-name></p></div></header>
+      <details class="rb-glass rb-panel rb-preview" aria-labelledby="rb-preview-title" data-rb-preview><summary class="rb-section-head rb-preview-toggle" id="rb-preview-title"><span>预览 <small class="rb-muted" data-rb-preview-name></small></span>${glyph('chevron')}</summary>
         <form class="rb-tools" data-rb-form="search" hidden><label class="rb-search">${glyph('search')}<input type="search" name="query" placeholder="搜索徽章" aria-label="搜索徽章" maxlength="200" enterkeyhint="search" autocomplete="off"></label><select name="group" aria-label="筛选分组"><option value="">全部分组</option></select></form>
         <div data-rb-results aria-busy="false"><p class="rb-empty">选择一个徽章包预览。</p></div><div class="rb-pager" data-rb-pager hidden>${b('上一页','prev')}<small data-rb-page></small>${b('下一页','next')}</div><p class="rb-sr" data-rb-preview-status role="status" aria-live="polite"></p>
-      </section>
+      </details>
     </div>
     <p class="rb-flash" data-rb-flash role="status" aria-live="polite" aria-atomic="true"></p>
     <dialog class="rb-dialog" data-rb-dialog aria-labelledby="rb-dialog-title"></dialog>
@@ -61,7 +61,7 @@ function attach(root, { api = localApi, toast } = {}) {
   const stableURL = new URL('/badge.json', location.href).href;
   const live = $('[data-rb-live]'), list = $('[data-rb-list]'), dialog = $('[data-rb-dialog]');
   const search = $('[data-rb-form="search"]'), query = search.elements.query, group = search.elements.group;
-  const results = $('[data-rb-results]'), previewStatus = $('[data-rb-preview-status]'), pager = $('[data-rb-pager]');
+  const preview = $('[data-rb-preview]'), results = $('[data-rb-results]'), previewStatus = $('[data-rb-preview-status]'), pager = $('[data-rb-pager]');
   const pending = new Set(), running = new Set(), stopped = new Map(), openRows = new Set();
   const abort = new AbortController();
   let data = {activeId:'',items:[]}, selectedId = '', page = 1, lastPage = 1, loaded = false, listSeq = 0, previewSeq = 0;
@@ -159,13 +159,27 @@ function attach(root, { api = localApi, toast } = {}) {
     name.textContent = id ? title(lookup(id)) : '';
     search.hidden = !id;
     if (focus) {
+      const wasOpen=preview.open;
+      preview.open=true;
       heading.focus({preventScroll:true});
-      heading.closest('section').scrollIntoView({block:'nearest'});
+      preview.scrollIntoView({block:'nearest'});
+      if(!wasOpen)return; // Opening triggers the toggle listener below.
     }
-    void loadPreview();
+    if(preview.open)void loadPreview();
   }
 
+  on(preview,'toggle',()=>{
+    if(preview.open){void loadPreview();return;}
+    clearTimeout(searchTimer);
+    previewSeq++;
+    results.replaceChildren();
+    results.setAttribute('aria-busy','false');
+    pager.hidden=true;
+    previewStatus.textContent='';
+  });
+
   async function loadPreview() {
+    if(!preview.open)return;
     const seq = ++previewSeq, requestedId = selectedId;
     pager.hidden = true;
     if (!requestedId) {
