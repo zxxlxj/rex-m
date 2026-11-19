@@ -8,11 +8,7 @@ const title = item => item?.alias || item?.url || '未命名徽章包';
 const modeName = item => item?.mode === 'host' ? '图片托管' : '直链';
 const publicInput = value => /^https:\/\/[^/]/i.test(value) && !value.includes('#') && safeURL(value);
 const presetBase = 'https://raw.githubusercontent.com/zxxlxj/rex-m/main/xijing-club/';
-const presets = [
-  ['pppboom.json','pppboom · Rex 推荐','727 条规则'],
-  ['pppboom-adult.json','pppboom 扩展版','1556 条规则 · 含成人内容，不建议用于 Rex'],
-  ['xinyue4capyplayer-general.json','CapyPlayer','493 条规则']
-];
+const presets = [['pppboom.json','戏精俱乐部 · 普通版','Rex 推荐']];
 const glyph = (type, extra = '') => `<svg aria-hidden="true" ${extra} viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${({badge:'<path d="m12 2 4 2.3 4.5.9.9 4.5L23 12l-1.6 2.3-.9 4.5-4.5.9L12 22l-4-2.3-4.5-.9-.9-4.5L1 12l1.6-2.3.9-4.5L8 4.3Z"/><path d="m8.5 12 2.3 2.2 4.7-4.8"/>',plus:'<path d="M12 5v14M5 12h14"/>',copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',search:'<circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/>',chevron:'<path d="m8 10 4 4 4-4"/>',image:'<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="m4 16 4.5-4 3 2.5 3.5-4 5 5"/><circle cx="8.5" cy="8.5" r=".75"/>'})[type]}</svg>`;
 const b = (label, act, opts = {}) => `<button type="button" class="rb-btn${opts.kind ? ` rb-${opts.kind}` : ''}" data-rb-act="${act}"${opts.id != null ? ` data-rb-id="${E(opts.id)}"` : ''}${opts.disabled ? ' disabled' : ''}${opts.attributes || ''}>${opts.icon ? glyph(opts.icon) : ''}${E(label)}</button>`;
 const color = value => typeof value === 'string' && /^#(?:[a-f\d]{3}|[a-f\d]{4}|[a-f\d]{6}|[a-f\d]{8})$/i.test(value) ? value : '';
@@ -301,7 +297,7 @@ function attach(root, { api = localApi, toast } = {}) {
   function importForm() {
     importRows = [];
     showModal('导入徽章包',`<form class="rb-form" data-rb-form="stage">
-      <fieldset class="rb-presets"><legend>仓库预设</legend>${presets.map(([file,label,note],i) => `<button type="button" class="rb-btn${i===1?' rb-danger':''}" data-rb-act="preset" data-rb-id="${i}"><span>${E(label)}</span><small>${E(note)}</small></button>`).join('')}</fieldset>
+      <fieldset class="rb-presets"><legend>仓库预设</legend>${presets.map(([file,label,note],i) => `<button type="button" class="rb-btn" data-rb-act="preset" data-rb-id="${i}"><span>${E(label)}</span><small>${E(note)}</small></button>`).join('')}</fieldset>
       ${field('徽章包 URL（每行一个）','<textarea name="urls" rows="3" placeholder="https://…/badges.json" spellcheck="false" autocapitalize="none" autofocus></textarea>')}
       ${field('本地 JSON 文件（可多选）','<input name="files" type="file" accept=".json,application/json" multiple>')}
       <div class="rb-form-grid">${field('默认交付方式',mode())}${field('本地文件的基础 URL（可选）','<input name="baseUrl" type="url" placeholder="https://…/" autocapitalize="none">')}</div>
