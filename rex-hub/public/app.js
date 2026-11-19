@@ -155,7 +155,7 @@ function renderLogs() {
   logPage=Math.min(pages,Math.max(1,logPage));
   const offset=(logPage-1)*LOG_PAGE_SIZE;
   const pager=()=>`<nav class="log-pager row" aria-label="日志分页">${btn('上一页','log-page',`data-log-page="${logPage-1}"${logPage===1?' disabled':''}`)}<span class="log-page-label" role="status">${logPage} / ${pages}</span>${btn('下一页','log-page',`data-log-page="${logPage+1}"${logPage===pages?' disabled':''}`)}</nav>`;
-  return `<header class="library-head row spread"><div><h1>同步日志</h1><small>${total} 条 · 上海时间</small></div>${btn('刷新','reload')}</header>${pages>1?pager():''}<section class="glass pad activity-list">${logs(state.logs.slice(offset,offset+LOG_PAGE_SIZE))}</section>${pages>1?pager():''}`;
+  return `<header class="library-head row spread"><div><h1>同步日志</h1><small>${total} 条</small></div>${btn('刷新','reload')}</header>${pages>1?pager():''}<section class="glass pad activity-list">${logs(state.logs.slice(offset,offset+LOG_PAGE_SIZE))}</section>${pages>1?pager():''}`;
 }
 function renderSettings() {
   const {defaultIcon,defaultDelivery,defaultRefreshMinutes,defaultNewPolicy}=state.settings;
@@ -541,5 +541,18 @@ async function boot(throwError=false){
     app.innerHTML=`<main class="startup glass stack" role="alert"><h2>无法连接控制台</h2><p>${E(errorText(e))}</p>${btn('重试','retry','','primary')}</main>`;
   }
 }
+app.addEventListener('rex:pull-refresh',event=>{
+  if(busy||!session?.authenticated||document.querySelector('dialog[open]'))return;
+  event.detail.pending=(async()=>{
+    try{
+      const badge=$('[data-rex-badges]',app);
+      if(page==='badges'&&badge){
+        const detail={};badge.dispatchEvent(new CustomEvent('rex:refresh',{detail}));
+        if(detail.pending&&await detail.pending===false)throw Error('刷新失败，请重试。');
+      }else{await load();if(!busy&&!document.querySelector('dialog[open]'))render();}
+      return true;
+    }catch(e){toast(errorText(e));return false;}
+  })();
+});
 boot();
 })();

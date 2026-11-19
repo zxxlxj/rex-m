@@ -57,3 +57,38 @@
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load',()=>{void navigator.serviceWorker.register('/sw.js').catch(()=>{});},{once:true});
 }
+
+// iOS standalone has no Safari pull-to-refresh chrome.
+(() => {
+  const app=document.getElementById('app');if(!app)return;
+  const standalone=matchMedia('(display-mode: standalone)');
+  const active=()=>standalone.matches||navigator.standalone===true;
+  const limit=58;let touch=null,busy=false,distance=0;
+  const indicator=document.createElement('div');indicator.className='lg-pull';indicator.setAttribute('role','status');indicator.hidden=true;
+  const label=document.createElement('span');indicator.append(label);document.body.append(indicator);
+  function show(y,text,loading=false){indicator.hidden=false;indicator.classList.toggle('is-refreshing',loading);indicator.style.setProperty('--pull',`${y}px`);label.textContent=text;}
+  function reset(){touch=null;distance=0;indicator.hidden=true;indicator.classList.remove('is-refreshing');}
+  window.addEventListener('touchstart',e=>{
+    if(!active()||busy||e.touches.length!==1||Math.max(scrollY,document.scrollingElement?.scrollTop||0)>1||!app.querySelector('#main')||document.querySelector('dialog[open]'))return;
+    if(e.target.closest?.('button,a,input,textarea,select,summary,[contenteditable],.library-modules,.activity-list,.dist-results'))return;
+    for(let el=e.target;el instanceof Element&&el!==document.body;el=el.parentElement){if(el.scrollHeight>el.clientHeight+2&&/auto|scroll/.test(getComputedStyle(el).overflowY))return;}
+    const p=e.touches[0];touch={x:p.clientX,y:p.clientY,id:p.identifier};
+  },{passive:true});
+  window.addEventListener('touchmove',e=>{
+    if(!touch)return;
+    const p=e.touches[0];if(e.touches.length!==1||p.identifier!==touch.id){reset();return;}
+    const dy=p.clientY-touch.y,dx=Math.abs(p.clientX-touch.x);
+    if(!distance&&(dy<-8||dx>Math.max(12,dy))){reset();return;}
+    if(dy<8&&!distance)return;
+    if(e.cancelable)e.preventDefault();
+    distance=Math.max(0,Math.min(84,dy*.55));show(distance,distance>=limit?'松手刷新':'下拉刷新');
+  },{passive:false});
+  window.addEventListener('touchend',async()=>{
+    if(!touch)return;
+    if(distance<limit){reset();return;}
+    touch=null;busy=true;show(limit,'正在刷新…',true);
+    try{const detail={};app.dispatchEvent(new CustomEvent('rex:pull-refresh',{detail}));if(detail.pending)await detail.pending;}
+    finally{busy=false;reset();}
+  },{passive:true});
+  window.addEventListener('touchcancel',()=>{if(touch)reset();},{passive:true});
+})();

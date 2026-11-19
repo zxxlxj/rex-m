@@ -498,6 +498,7 @@ function attach(root, { api = localApi, toast } = {}) {
     if (dialog.open) dialog.close();
     IS_MOUNTED.delete(root);
   };
+  on(root,'rex:refresh',event=>{event.detail.pending=refresh();});
   IS_MOUNTED.set(root,cleanup);
   void refresh();
   return cleanup;
