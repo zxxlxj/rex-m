@@ -16,7 +16,7 @@ use std::{
 use url::Url;
 use uuid::Uuid;
 
-const LIMIT: usize = 1 << 20;
+const LIMIT: usize = 8 << 20;
 const MAX_ITEMS: usize = 160;
 const META: [&str; 9] = [
     "id",
@@ -375,7 +375,7 @@ async fn download(app: &App, initial: Url, previous: &Value, cap: usize, raw: bo
                 return Ok(out);
             }
             if status != 200 { return Err(fail(422, format!("来源请求失败（HTTP {status}）"))); }
-            let too_big = || fail(413, if cap == LIMIT { "上游内容超过 1 MiB".into() } else { format!("上游内容超过 {cap} 字节") });
+            let too_big = || fail(413, if cap == LIMIT { "上游内容超过 8 MiB".into() } else { format!("上游内容超过 {cap} 字节") });
             if response.content_length().is_some_and(|n| n > cap as u64) { return Err(too_big()); }
             let mut bytes = Vec::new();
             while let Some(chunk) = response.chunk().await.map_err(|e| if e.is_timeout() { fail(504, "上游请求超时") } else { fail(502, "无法完整读取上游内容") })? {
@@ -928,8 +928,8 @@ async fn parse_upload(app: &App, input: &Value, origin: &str) -> R<Parsed> {
             return Err(fail(422, "不能上传空文件"));
         }
         total += payload.len();
-        if payload.len() > LIMIT || total > 4 * LIMIT {
-            return Err(fail(413, "单个文件最多 1 MiB，总计最多 4 MiB"));
+        if payload.len() > LIMIT || total > 2 * LIMIT {
+            return Err(fail(413, "单个文件最多 8 MiB，总计最多 16 MiB"));
         }
         if is_index {
             if index.replace((name, payload)).is_some() {

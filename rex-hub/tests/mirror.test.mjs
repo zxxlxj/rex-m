@@ -95,13 +95,27 @@ test('rejects unsafe redirects and oversized or non-module upstream bodies', asy
   globalThis.fetch = async url => {
     seen.push(url);
     if (url.includes('redirect')) return new Response(null, { status: 302, headers: { Location: 'https://127.0.0.1/protected' } });
-    if (url.includes('size')) return new Response(new Uint8Array(1024 * 1024 + 1));
+    if (url.includes('size')) return new Response(new Uint8Array(8 * 1024 * 1024 + 1));
     return new Response('<html>rate limit</html>');
   };
   const next = await mirrorSource(sourceOf([row('redirect'), row('size'), row('html')]), env, origin);
   assert.equal(seen.length, 3);
   assert.match(next.modules[0].mirror.error, /公开 HTTPS/);
-  assert.match(next.modules[1].mirror.error, /1 MiB/);
+  assert.match(next.modules[1].mirror.error, /8 MiB/);
   assert.match(next.modules[2].mirror.error, /网页/);
   assert.equal(files.size, 0);
+});
+
+test('imports and mirrors scripts above the old 1 MiB limit', async t => {
+  const { env, files } = setup(t);
+  const {ingest}=await import('../src/sources.mjs');
+  const payload=script('large')+'/*'+ 'x'.repeat(2 * 1024 * 1024)+'*/';
+  globalThis.fetch=async()=>new Response(payload);
+  const online=await ingest({url:'https://upstream.example.com/large.js'},env,origin);
+  assert.equal(online.modules[0].id,'large');
+  const local=await ingest({files:[{name:'large.js',text:payload}]},env,origin);
+  assert.equal(local.modules[0].id,'large');
+  const mirrored=await mirrorSource(sourceOf([row('large')]),env,origin);
+  assert.equal(mirrored.modules[0].mirror.version,'2');
+  assert.ok(files.get(`files/${mirrored.modules[0].mirror.hash}.js`).length>2*1024*1024);
 });

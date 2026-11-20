@@ -163,7 +163,7 @@ async function admin(req,env,url){
   }
   if(req.method!=='POST')fail(404,'接口不存在');
   if(path==='/api/icon')return uploadIcon(req,env,originFor(env,(await get(env)).st,origin));
-  const a=await input(req,path==='/api/source'?5_800_000:256_000);
+  const a=await input(req,path==='/api/source'?24 * 1024 * 1024:256_000);
   if(path==='/api/password')return changePassword(req,env,a);
   if(path==='/api/settings')return json(await change(env,st=>{
     st.origin ||= origin;

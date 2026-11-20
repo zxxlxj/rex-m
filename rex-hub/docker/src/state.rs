@@ -1124,8 +1124,9 @@ pub async fn api(
             } else {
                 Some(index(&st["categories"], &idv)?)
             };
-            let mut rule_changed = false;
+            let rule_changed;
             if on(&a["delete"]) {
+                rule_changed = true;
                 st["categories"]
                     .as_array_mut()
                     .unwrap()

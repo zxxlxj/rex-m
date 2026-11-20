@@ -1,6 +1,6 @@
 import { parseManifestLiteral } from './manifest-parser.mjs';
 
-const LIMIT = 1024 * 1024, UPLOAD_LIMIT = 4 * LIMIT, MAX_FILES = 32, MAX_ITEMS = 160;
+const LIMIT = 8 * 1024 * 1024, UPLOAD_LIMIT = 2 * LIMIT, MAX_FILES = 32, MAX_ITEMS = 160;
 const WRAPPER = 'rexnow.tv';
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const BAD_SUFFIX = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan|home|corp|onion|test|invalid|example|alt|arpa)$/i;
@@ -63,10 +63,10 @@ function safeHeader(v) { return typeof v === 'string' && /^[\x20-\x7e]{1,256}$/.
 function stop(body) { try { void body?.cancel().catch(() => {}); } catch {} }
 
 async function readBody(response, signal, raw) {
-  if (Number(response.headers.get('Content-Length')) > LIMIT) { stop(response.body); fail('上游内容超过 1 MiB', 413); }
+  if (Number(response.headers.get('Content-Length')) > LIMIT) { stop(response.body); fail('上游内容超过 8 MiB', 413); }
   if (!response.body) fail('上游响应没有内容', 502);
   const reader = response.body.getReader();
-  const bytes = new Uint8Array(LIMIT); let size = 0, done = false;
+  let bytes = new Uint8Array(64 * 1024); let size = 0, done = false;
   const cancel = () => { void reader.cancel().catch(() => {}); };
   signal.addEventListener('abort', cancel, { once: true });
   try {
@@ -74,8 +74,10 @@ async function readBody(response, signal, raw) {
       const item = await reader.read();
       if (signal.aborted) fail('上游请求超时', 504);
       if (item.done) { done = true; break; }
-      if (size + item.value.byteLength > LIMIT) fail('上游内容超过 1 MiB', 413);
-      bytes.set(item.value, size); size += item.value.byteLength;
+      if (size + item.value.byteLength > LIMIT) fail('上游内容超过 8 MiB', 413);
+      const end=size+item.value.byteLength;
+      if(end>bytes.length){const larger=new Uint8Array(Math.min(LIMIT,Math.max(end,bytes.length*2)));larger.set(bytes);bytes=larger;}
+      bytes.set(item.value, size); size=end;
     }
     const payload = bytes.subarray(0, size);
     if (raw) return payload;
@@ -221,12 +223,12 @@ function importFiles(files) {
     if (name.length > 180 || name !== name.trim() || name.startsWith('.') || /[/\\%?#:\u0000-\u001f\u007f]/.test(name) || BAD_CONTROL.test(name) || !/\.(?:js|rex)$/i.test(name)) fail('文件名无效，仅允许 .js 或 .rex 文件名，不含路径');
     if (names.has(name.toLowerCase())) fail('上传的文件名重复', 422);
     names.add(name.toLowerCase());
-    if (f.text.length > LIMIT) fail('单个文件不能超过 1 MiB', 413);
+    if (f.text.length > LIMIT) fail('单个文件不能超过 8 MiB', 413);
 
     if (/[\uD800-\uDFFF]/u.test(f.text)) fail('文件内容不是有效的 Unicode', 422);
     const bytes = encode.encode(f.text); total += bytes.length;
     if (!bytes.length) fail('不能上传空文件', 422);
-    if (bytes.length > LIMIT || total > UPLOAD_LIMIT) fail('单个文件最多 1 MiB，总计最多 4 MiB', 413);
+    if (bytes.length > LIMIT || total > UPLOAD_LIMIT) fail('单个文件最多 8 MiB，总计最多 16 MiB', 413);
     result.push({ name, payload: f.text, bytes, index: /\.rex$/i.test(name) });
   }
   return result;

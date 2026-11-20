@@ -4,7 +4,7 @@ export function rejectEncrypted(source) {
 }
 export function parseManifestLiteral(source) {
   rejectEncrypted(source);
-  if (source.length > 1024 * 1024) throw new Error('模块超过 1 MiB');
+  if (source.length > 8 * 1024 * 1024) throw new Error('模块超过 8 MiB');
   let i = 0, depth = 0;
   function ws() {
     for (;;) {

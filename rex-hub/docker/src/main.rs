@@ -223,7 +223,7 @@ async fn route(app: &Arc<App>, req: Request) -> Result<Response> {
         }
         let data = if method == Method::POST {
             let cap = match path.as_str() {
-                "/api/source" => 5_800_000,
+                "/api/source" => 24 * 1024 * 1024,
                 "/api/badges/import" => 12_000_000,
                 _ => 256_000,
             };
@@ -359,7 +359,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .dns_resolver(Arc::new(sources::PublicDns))
-        .user_agent("RexHub-Docker/0.0.6")
+        .user_agent("RexHub-Docker/0.0.7")
         .build()?;
     let setup_token = env::var("SETUP_TOKEN_FILE")
         .ok()
