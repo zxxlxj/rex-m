@@ -15,7 +15,7 @@ const selectedSources = new Set(), batchDeleteSources = new WeakMap();
 let sourceSearch = '', selectingSources = false;
 const selectedModules=new Map();
 let selectingModules=false;
-let sourceMode = 'groups', categorySearch = '', categoryFilter = '', typeFilter = '', categoryManagerOpen = false;
+let sourceMode = 'groups', categorySearch = '', categoryFilter = '', typeFilter = '';
 const contentTypes = Object.freeze({video:'视频', music:'音乐', audiobook:'有声书', shortDrama:'短剧'});
 const contentType = (m,s) => {const type=m.mirror?.contentMetadataVersion===1 && s && sourceMirrorEnabled(s,m) ? m.mirror.contentType : m.contentType;return Object.hasOwn(contentTypes,type) ? type : '';};
 const contentBadge = type => type ? `<span class="library-type" data-type="${type}">${contentTypes[type]}</span>` : '';
@@ -60,7 +60,7 @@ function categorySelect(current, attrs='', placeholder='未分类') { return `<s
 function formError() { return '<p class="error" data-error role="alert"></p>'; }
 function renderAuth() {
   selectingSources=false;selectedSources.clear();
-  sourceMode='groups';categorySearch='';categoryFilter='';typeFilter='';categoryManagerOpen=false;selectingModules=false;selectedModules.clear();
+  sourceMode='groups';categorySearch='';categoryFilter='';typeFilter='';selectingModules=false;selectedModules.clear();
   unmountBadges?.();unmountBadges=undefined;
   const setup = !session.initialized;
   app.innerHTML = `<main class="auth-screen"><section class="auth glass pad stack">${brand()}<header><span class="eyebrow">${setup?'FIRST RUN':'WELCOME BACK'}</span><h1>${setup?'初始化控制台':'欢迎回来'}</h1><p>${setup?'输入部署时配置的初始化令牌，并为控制台设置密码。':'使用管理密码登录，管理 REX 来源与分发。'}</p></header><form class="stack" data-form="${setup?'setup':'login'}">${setup?field('初始化令牌',input('token','','type="password" required autocomplete="off"')):''}${field('管理密码',input('password','',`type="password" required autocomplete="${setup?'new-password':'current-password'}"`))}${formError()}${submit(setup?'初始化':'登录控制台')}</form></section></main>`;
@@ -179,17 +179,21 @@ function renderSourceCategories() {
     const ref=`${s.id}:${m.id}`;
     group.rows.push(`<li class="library-category-row" data-module-ref="${E(ref)}" data-source-id="${E(s.id)}" data-module-id="${E(m.id)}" data-search="${E(search)}" data-content-type="${type||'unspecified'}">${selectingModules?`<input type="checkbox" data-change="category-module-select" aria-label="${E(`选择 ${title}`)}"${checked(selectedModules.has(ref))}>`:``}<span class="library-text"><strong title="${E(title)}">${E(title)}</strong><small title="${E(meta)}">${E(meta)}</small></span>${contentBadge(type)}<div class="library-category-assignment">${categorySelect(m.categoryId,attrs,'继承来源')}</div></li>`);
   }
-  const filters=`<div class="library-category-filters"><input type="search" data-filter="category-modules" aria-label="搜索模块" placeholder="搜索模块或来源" autocomplete="off" value="${E(categorySearch)}">${field('分类',`<select data-change="category-filter"><option value="">全部分类</option>${allGroups.map(g=>`<option value="${E(g.key)}"${selected(g.key===categoryFilter)}>${E(g.title)}</option>`).join('')}</select>`)}${field('模块声明',`<select data-change="category-type-filter"><option value="">全部类型</option><option value="unspecified"${selected(typeFilter==='unspecified')}>未指定</option>${Object.entries(contentTypes).map(([key,title])=>`<option value="${key}"${selected(key===typeFilter)}>${title}</option>`).join('')}</select>`)}</div>`;
-  const managerRows=state.categories.map(c=>`<div class="library-category-entry row spread"><strong class="wrap grow">${E(c.name)}</strong><div class="row">${btn('重命名','edit-category',`data-id="${E(c.id)}" aria-label="${E(`重命名分类：${c.name}`)}"`)}${btn('删除','delete-category',`data-id="${E(c.id)}" aria-label="${E(`删除分类：${c.name}`)}"`,'danger')}</div></div>`).join('')||empty('尚未添加分类。');
-  const manager=`<details class="glass library-category-manager" data-category-manager${categoryManagerOpen?' open':''}><summary><span>管理分类 <small>${state.categories.length}</small></span><i class="chevron" aria-hidden="true"></i></summary><div class="library-category-entries">${managerRows}</div></details>`;
+  const filters=`<div class="library-category-filters"><input type="search" data-filter="category-modules" aria-label="搜索模块" placeholder="搜索模块或来源" autocomplete="off" value="${E(categorySearch)}">${field('模块声明',`<select data-change="category-type-filter"><option value="">全部类型</option><option value="unspecified"${selected(typeFilter==='unspecified')}>未指定</option>${Object.entries(contentTypes).map(([key,title])=>`<option value="${key}"${selected(key===typeFilter)}>${title}</option>`).join('')}</select>`)}</div>`;
+  const categoryTabs=[{key:'',title:'全部'},uncategorized,...groups.values()];
+  const chip=g=>btn(g.title,'category-chip',`data-category-key="${E(g.key)}" aria-pressed="${g.key===categoryFilter}"`,'library-category-chip');
+  const primary=categoryTabs.slice(0,6), overflow=categoryTabs.slice(6);
+  const activeOverflow=overflow.find(g=>g.key===categoryFilter);
+  const categoryNav=`<div class="library-category-tabs" role="group" aria-label="模块分类">${primary.map(chip).join('')}${overflow.length?`<details class="library-category-more"><summary class="btn library-category-chip">${activeOverflow?E(activeOverflow.title)+' · ':''}更多</summary><div class="library-category-overflow">${overflow.map(chip).join('')}</div></details>`:''}</div>`;
   const groupsHtml=allGroups.filter(g=>g.rows.length).map(g=>`<section class="library-category-group" data-category-group="${E(g.key)}"><h2>${E(g.title)}</h2><ul>${g.rows.join('')}</ul></section>`).join('');
-  return `<header class="library-head row spread"><h1>来源</h1><div class="row">${btn(selectingModules?'完成':'多选','module-select-mode',`aria-pressed="${selectingModules}"`)}${btn('＋ 新建分类','edit-category','','primary')}</div></header>${sourceViewTabs()}<div id="source-view" class="stack library-category-view" role="tabpanel" aria-labelledby="source-tab-categories">${manager}<section class="glass library-category-panel" aria-label="分类模块">${filters}${selectingModules?`<div class="library-batch row"><small data-module-selection role="status"></small>${btn('全选筛选结果','module-select-visible')}${btn('清空','module-clear-selection')}${btn('调整分类','module-batch-category','disabled','primary')}</div>`:``}<p class="library-category-count" data-category-count role="status"></p>${groupsHtml}<p class="empty" data-category-empty hidden></p></section></div>`;
+  return `<header class="library-head row spread"><h1>来源</h1><div class="row">${btn(selectingModules?'完成':'多选','module-select-mode',`aria-pressed="${selectingModules}"`)}${btn('管理分类','category-manage','','primary')}</div></header>${sourceViewTabs()}<div id="source-view" class="stack library-category-view" role="tabpanel" aria-labelledby="source-tab-categories">${categoryNav}<section class="glass library-category-panel" aria-label="分类模块">${filters}${selectingModules?`<div class="library-batch row"><small data-module-selection role="status"></small>${btn('全选筛选结果','module-select-visible')}${btn('清空','module-clear-selection')}${btn('调整分类','module-batch-category','disabled','primary')}</div>`:``}<p class="library-category-count" data-category-count role="status"></p>${groupsHtml}<p class="empty" data-category-empty hidden></p></section></div>`;
 }
 function filterCategoryModules(){
   const view=$('.library-category-view',app);if(!view)return;
   const query=categorySearch.trim().toLowerCase();let visible=0, total=0;
   for(const group of view.querySelectorAll('[data-category-group]')){
     const matchesCategory=!categoryFilter||categoryFilter===group.dataset.categoryGroup;
+    group.querySelector('h2').hidden=!!categoryFilter;
     let groupCount=0;
     for(const row of group.querySelectorAll('.library-category-row')){
       const matches=matchesCategory&&(!typeFilter||typeFilter===row.dataset.contentType)&&row.dataset.search.includes(query);
@@ -292,9 +296,9 @@ function render() {
 }
 function go(target) { if (!Object.hasOwn(tabs,target)) return; page=target; render(); window.scrollTo(0,0); const h=$('main h1'); h.tabIndex=-1; h.focus({preventScroll:true}); }
 function showDialog(title, html) {
-  returnFocus = document.activeElement;
+  if(!dialog.open)returnFocus = document.activeElement;
   dialog.innerHTML=`<div class="stack"><div class="row spread"><h2 id="dialog-title">${E(title)}</h2>${btn('关闭','close','','link')}</div>${html}</div>`;
-  dialog.showModal();
+  if(!dialog.open)dialog.showModal();
 }
 dialog.addEventListener('close',()=>{if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});});
 dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
@@ -555,6 +559,11 @@ async function submitSourceBatch(action, ids){
   }
 }
 const actions={
+  'category-chip'(b){categoryFilter=b.dataset.categoryKey;render();const chips=[...app.querySelectorAll('[data-category-key]')];const current=chips.find(x=>x.dataset.categoryKey===categoryFilter);(current?.closest('.library-category-more')?.querySelector('summary')||current)?.focus({preventScroll:true});},
+  'category-manage'(){
+    const rows=state.categories.map(c=>`<div class="library-category-entry row"><strong class="grow wrap">${E(c.name)}</strong>${btn('重命名','edit-category',`data-id="${E(c.id)}"`)}${btn('删除','delete-category',`data-id="${E(c.id)}"`,'danger')}</div>`).join('')||empty('尚未添加分类。');
+    showDialog('管理分类',`<div class="stack">${btn('＋ 新建分类','edit-category','','primary')}<div class="library-category-manager-list">${rows}</div></div>`);
+  },
   'module-select-mode'(){selectingModules=!selectingModules;if(!selectingModules)selectedModules.clear();render();$('[data-act="module-select-mode"]',app)?.focus({preventScroll:true});},
   'module-select-visible'(){for(const row of app.querySelectorAll('.library-category-row:not([hidden])')){selectedModules.set(row.dataset.moduleRef,{sourceId:row.dataset.sourceId,id:row.dataset.moduleId});$('input[type=checkbox]',row).checked=true;}filterCategoryModules();},
   'module-clear-selection'(){selectedModules.clear();for(const i of app.querySelectorAll('[data-change="category-module-select"]'))i.checked=false;filterCategoryModules();},
@@ -636,7 +645,7 @@ function asyncAction(work,scope){
 document.addEventListener('click',event=>{
   const b=event.target.closest?.('button[data-act]'); if(!b||busy)return;
   const {act,id}=b.dataset;
-  if(['nav','source-view','module-select-mode','module-select-visible','module-clear-selection','module-batch-category','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module','source-multiselect','source-select-visible','source-select-clear','source-batch-delete'].includes(act)){
+  if(['nav','source-view','category-chip','category-manage','module-select-mode','module-select-visible','module-clear-selection','module-batch-category','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module','source-multiselect','source-select-visible','source-select-clear','source-batch-delete'].includes(act)){
     actions[act](b,id,state.distributions.find(d=>d.id===id));return;
   }
   if(act==='retry'){asyncAction(()=>boot());return;}
@@ -684,7 +693,6 @@ app.addEventListener('keydown',event=>{
 app.addEventListener('toggle',event=>{
   const el=event.target;
   if(!el.isConnected||page!=='sources')return;
-  if(el.hasAttribute('data-category-manager')){categoryManagerOpen=el.open;return;}
   const key=el.dataset.module||el.dataset.sourceSettings||el.dataset.id;
   const group=el.dataset.module?openModules:el.dataset.sourceSettings?openSettings:expanded;
   if(el.tagName==='DETAILS'&&key){if(el.open)group.add(key);else group.delete(key);}
@@ -698,8 +706,8 @@ document.addEventListener('change',event=>{
     refreshSourceSelection();return;
   }
   if(change==='category-module-select'){const row=el.closest('[data-module-ref]');if(!row)return;const d=row.dataset;if(busy){el.checked=selectedModules.has(d.moduleRef);return;}if(el.checked)selectedModules.set(d.moduleRef,{sourceId:d.sourceId,id:d.moduleId});else selectedModules.delete(d.moduleRef);filterCategoryModules();return;}
-  if(change==='category-filter'||change==='category-type-filter'){
-    if(change==='category-filter')categoryFilter=el.value;else typeFilter=el.value;
+  if(change==='category-type-filter'){
+    typeFilter=el.value;
     filterCategoryModules();return;
   }
   if(change==='import-method') {
