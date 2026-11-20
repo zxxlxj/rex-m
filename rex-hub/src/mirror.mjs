@@ -1,5 +1,5 @@
 import { parseManifestLiteral } from './manifest-parser.mjs';
-import { fetchMirrorBytes } from './sources.mjs';
+import { fetchMirrorBytes, contentMetadata } from './sources.mjs';
 
 const BATCH = 3, DEFAULT_MINUTES = 30;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -71,7 +71,7 @@ function snapshotVersion(module, bytes, contentType, effectiveUrl) {
     if (metadata !== undefined) {
       if (!fields(metadata) || !Array.isArray(metadata.modules)) throw new Error('上游 WidgetMetadata 不完整或无效');
       if (metadata.id !== module.id) throw new Error('上游 WidgetMetadata ID 与来源模块不一致');
-      return { version: metadata.version.trim(), requiredVersion: metadata.requiredVersion.trim(), literal: true };
+      return { version: metadata.version.trim(), requiredVersion: metadata.requiredVersion.trim(), literal: true, ...contentMetadata(metadata) };
     }
 
     if (/\bWidgetMetadata\s*=/.test(text)) throw new Error('无法静态验证上游 WidgetMetadata');
@@ -94,7 +94,7 @@ function snapshotVersion(module, bytes, contentType, effectiveUrl) {
       !/(?:[;={}()]|^\s*(?:\/\/|\/\*)|^\s*[A-Za-z0-9+/_=-]{32,}\s*$)/.test(text)) {
     throw new Error('上游文本不是可识别的模块内容');
   }
-  return { version: module.version.trim(), requiredVersion: module.requiredVersion.trim(), literal: false };
+  return { version: module.version.trim(), requiredVersion: module.requiredVersion.trim(), literal: false, ...contentMetadata(module) };
 }
 
 async function digest(bytes) {
@@ -111,12 +111,12 @@ async function check(module, env, site) {
     if (!site) throw new Error('发布站点须为 HTTPS 源站地址');
     if (typeof env?.FILES?.put !== 'function') throw new Error('缺少 FILES 存储绑定');
     stage = 'download';
-    const result = await fetchMirrorBytes(remoteUrl, success?.remoteUrl === remoteUrl ? success : undefined);
+    const result = await fetchMirrorBytes(remoteUrl, success?.contentMetadataVersion===1 && success.remoteUrl === remoteUrl ? success : undefined);
     const { effectiveUrl, etag, lastModified } = result;
     const validators = etag || lastModified ? { effectiveUrl, ...(etag && { etag }), ...(lastModified && { lastModified }) } : {};
     if (result.unchanged) {
       const { version, requiredVersion, hash } = success;
-      return { url: `${site}/files/${hash}.js`, version, requiredVersion, hash, remoteUrl, checkedAt: timestamp(), ...validators };
+      return { url: `${site}/files/${hash}.js`, version, requiredVersion, hash, remoteUrl, checkedAt: timestamp(), contentMetadataVersion:1, ...contentMetadata(success), ...validators };
     }
     stage = 'validate';
     const bytes = result.payload;
@@ -130,7 +130,7 @@ async function check(module, env, site) {
 
     const keepVersion = !meta.literal && hash === success?.hash;
     const { version, requiredVersion } = keepVersion ? success : meta;
-    return { url: `${site}/${key}`, version, requiredVersion, hash, remoteUrl, checkedAt: timestamp(), ...validators };
+    return { url: `${site}/${key}`, version, requiredVersion, hash, remoteUrl, checkedAt: timestamp(), contentMetadataVersion:1, ...contentMetadata(keepVersion&&success.contentMetadataVersion===1?success:meta), ...validators };
   } catch (e) {
 
     const error = stage === 'store' ? '无法保存镜像文件' : e?.message || '无法检查镜像';

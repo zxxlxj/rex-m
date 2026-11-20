@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 const LIMIT: usize = 1 << 20;
 const MAX_ITEMS: usize = 160;
-const META: [&str; 7] = [
+const META: [&str; 9] = [
     "id",
     "title",
     "version",
@@ -26,6 +26,8 @@ const META: [&str; 7] = [
     "author",
     "icon",
     "description",
+    "contentType",
+    "continuousPlay",
 ];
 const INTERVALS: [u64; 8] = [5, 15, 30, 60, 180, 360, 720, 1440];
 type R<T> = std::result::Result<T, (u16, String)>;
@@ -580,6 +582,9 @@ fn manual(input: &Value, base: Option<&Url>) -> R<Value> {
         .ok_or_else(|| fail(400, "手动元数据须为对象"))?;
     let mut output = Map::new();
     for k in META {
+        if matches!(k, "contentType" | "continuousPlay") {
+            continue;
+        }
         if let Some(v) = fields.get(k) {
             let value = text(
                 v,
@@ -601,7 +606,21 @@ fn manual(input: &Value, base: Option<&Url>) -> R<Value> {
             );
         }
     }
+    output.extend(content_metadata(input));
     Ok(Value::Object(output))
+}
+pub fn content_metadata(v: &Value) -> Map<String, Value> {
+    let mut out = Map::new();
+    if matches!(
+        v["contentType"].as_str(),
+        Some("video" | "music" | "audiobook" | "shortDrama")
+    ) {
+        out.insert("contentType".into(), v["contentType"].clone());
+    }
+    if v["continuousPlay"].is_boolean() {
+        out.insert("continuousPlay".into(), v["continuousPlay"].clone());
+    }
+    out
 }
 fn id_ok(id: &str) -> bool {
     id.bytes()
@@ -661,9 +680,9 @@ fn meta(m: &Value, base: Option<&Url>, js: bool) -> R<Value> {
     } else {
         publish_url(icon, base, false)?.into()
     };
-    Ok(
-        json!({"id":id, "title":text(&m["title"],160,"模块标题",true)?, "version":text(&m["version"],48,"模块版本",true)?, "requiredVersion":text(&m["requiredVersion"],48,"模块所需版本",true)?, "author":text(&m["author"],120,"模块作者",false)?, "icon":icon, "description":text(&m["description"],500,"模块描述",false)?}),
-    )
+    let mut out = json!({"id":id, "title":text(&m["title"],160,"模块标题",true)?, "version":text(&m["version"],48,"模块版本",true)?, "requiredVersion":text(&m["requiredVersion"],48,"模块所需版本",true)?, "author":text(&m["author"],120,"模块作者",false)?, "icon":icon, "description":text(&m["description"],500,"模块描述",false)?});
+    out.as_object_mut().unwrap().extend(content_metadata(m));
+    Ok(out)
 }
 fn module(mut m: Value, url: &str) -> Value {
     m["url"] = json!(url);
@@ -1038,7 +1057,7 @@ fn snapshot<'a>(
     bytes: &[u8],
     mime: &str,
     effective: &Url,
-) -> R<(String, String, bool)> {
+) -> R<(String, String, bool, Map<String, Value>)> {
     if bytes.is_empty() {
         return Err(fail(422, "上游模块为空"));
     }
@@ -1074,7 +1093,12 @@ fn snapshot<'a>(
             if s(&metadata, "id") != s(m, "id") {
                 return Err(fail(422, "上游 WidgetMetadata ID 与来源模块不一致"));
             }
-            return Ok((version.into(), required.into(), true));
+            return Ok((
+                version.into(),
+                required.into(),
+                true,
+                content_metadata(&metadata),
+            ));
         }
         if ASSIGNMENT.is_match(src) {
             return Err(fail(422, "无法静态验证上游 WidgetMetadata"));
@@ -1101,7 +1125,7 @@ fn snapshot<'a>(
     {
         return Err(fail(422, "上游文本不是可识别的模块内容"));
     }
-    Ok((version.into(), required.into(), false))
+    Ok((version.into(), required.into(), false, content_metadata(m)))
 }
 fn hash_ok(hash: &str) -> bool {
     hash.len() == 64
@@ -1128,16 +1152,17 @@ async fn mirror_one(app: &App, m: &Value, site: &str) -> Value {
         if site.is_empty() { return Err(fail(422, "发布站点须为 HTTPS 源站地址")); }
         let u = public_url(remote, None, false)?;
         if wrapper(&u) { return Err(fail(422, "不接受 Rex 包装链接")); }
-        let payload = download(app, u, if remote == s(success, "remoteUrl") { success } else { &Value::Null }, LIMIT, true).await?;
-        let (hash, version, required) = if let Some(bytes) = &payload.body {
-            let (version, required, literal) = snapshot(m, bytes, &payload.mime, &payload.url)?;
+        let payload = download(app, u, if success["contentMetadataVersion"]==1 && remote == s(success, "remoteUrl") { success } else { &Value::Null }, LIMIT, true).await?;
+        let (hash, version, required, fields) = if let Some(bytes) = &payload.body {
+            let (version, required, literal, fields) = snapshot(m, bytes, &payload.mime, &payload.url)?;
             let hash = file_hash(bytes);
             if hash != s(success, "hash") {
                 put_file(app, &format!("files/{hash}.js"), bytes).await.map_err(|_| fail(503, "无法保存镜像文件"))?;
             }
-            if !literal && hash == s(success, "hash") { (hash, s(success, "version").into(), s(success, "requiredVersion").into()) } else { (hash, version, required) }
-        } else { (s(success, "hash").into(), s(success, "version").into(), s(success, "requiredVersion").into()) };
-        let mut out = json!({"url":format!("{site}/files/{hash}.js"), "version":version, "requiredVersion":required, "hash":hash, "remoteUrl":remote, "checkedAt":stamp()});
+            if !literal && hash == s(success, "hash") { (hash, s(success, "version").into(), s(success, "requiredVersion").into(), if success["contentMetadataVersion"]==1{content_metadata(success)}else{fields}) } else { (hash, version, required, fields) }
+        } else { (s(success, "hash").into(), s(success, "version").into(), s(success, "requiredVersion").into(), content_metadata(success)) };
+        let mut out = json!({"url":format!("{site}/files/{hash}.js"), "version":version, "requiredVersion":required, "hash":hash, "remoteUrl":remote, "checkedAt":stamp(), "contentMetadataVersion":1});
+        out.as_object_mut().unwrap().extend(fields);
         if !payload.etag.is_empty() || !payload.modified.is_empty() { out["effectiveUrl"] = json!(payload.url.as_str()); }
         if !payload.etag.is_empty() { out["etag"] = json!(payload.etag); }
         if !payload.modified.is_empty() { out["lastModified"] = json!(payload.modified); }
@@ -1302,6 +1327,7 @@ async fn ingest_inner(app: &App, input: &Value, origin: &str) -> R<Value> {
         source["etag"] = json!(payload.etag);
         source["lastModified"] = json!(payload.modified);
         source["manualMetadata"] = manual;
+        source["contentMetadataVersion"] = json!(1);
         parsed
     };
     source["modules"] = Value::Array(std::mem::take(&mut parsed.modules));
@@ -1424,7 +1450,7 @@ async fn refresh_inner(
         let payload = download(
             app,
             u.clone(),
-            if has(source, "icon") {
+            if source["contentMetadataVersion"] == 1 {
                 source
             } else {
                 &Value::Null
@@ -1446,6 +1472,7 @@ async fn refresh_inner(
             out["moduleOverrides"] = json!(tombs);
         }
         out["checkedAt"] = json!(stamp());
+        out["contentMetadataVersion"] = json!(1);
         out["status"] = json!("正常");
         out["effectiveUrl"] = json!(payload.url.as_str());
         out["etag"] = json!(payload.etag);
@@ -1523,10 +1550,10 @@ mod tests {
         let meta = js_meta(WIDGET.as_bytes(), None, &Value::Null).unwrap();
         assert_eq!(meta["title"], "示例 👋");
         assert_eq!(meta["version"], "2.1");
-        let (_, _, verified) =
+        let (_, _, verified, _) =
             snapshot(&index.modules[0], WIDGET.as_bytes(), "text/plain", &root).unwrap();
         assert!(verified);
-        let (version, _, verified) = snapshot(
+        let (version, _, verified, _) = snapshot(
             &index.modules[0],
             b"// REXENC:2\r\nEncryptedPayload",
             "text/plain",

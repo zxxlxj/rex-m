@@ -1,6 +1,6 @@
 # Rex Hub · 模块聚合与分发
 
-**当前版本：`0.0.2`**
+**当前版本：`0.0.3`**
 
 可选 **[Docker 自托管](./DOCKER.md)** 或 **[Cloudflare Worker](#一键部署到-cloudflare)**。下面的免费额度提示只适用于 Cloudflare 版。
 
@@ -14,7 +14,7 @@
 公开镜像，无需登录 GHCR，支持 `linux/amd64` 和 `linux/arm64`：
 
 ```bash
-docker pull ghcr.io/zxxlxj/rex-hub:0.0.2
+docker pull ghcr.io/zxxlxj/rex-hub:0.0.3
 ```
 
 启动命令和 NAS／HTTPS 配置见 [Docker 部署说明](./DOCKER.md)。
@@ -35,6 +35,10 @@ docker pull ghcr.io/zxxlxj/rex-hub:0.0.2
 3. 在「分发」按分类、来源或模块选入内容，设置图标，可自行指定 key，也可留空随机生成。点「保存并发布」，复制 `/s/<key>.rex` 链接到 Rex 的模块导入入口。
 4. 已启用并发布过的分发会自动跟随已发布规则：符合规则的导入、分类调整、审核通过、检查和删除都会更新链接，无需再次点发布。待审核、首次下载未完成或存在冲突的内容不会强行发布。来源列表右侧可立即检查，顶部多选可批量检查或删除；超出单次处理上限的检查会排队，由定时任务继续完成。
 5. 更新频率、审核策略与默认图标可在「设置」调整，来源和托管模块可单独覆盖。Worker 每 5 分钟分批检查到期任务；这是服务端检查，不等于 Rex App 会自动重拉合集。短 key 可被猜到，不要把分发当成私密存储。
+
+## 来源分类与 Rex 内容类型
+
+来源页可切换到「分类」，按分类或内容类型浏览、搜索及改分组，也可在这里新增、重命名或删除分类。Hub 保留 [Rex 官方声明](https://modules.rexnow.app/guide/#content-type) `video`、`music`、`audiobook`、`shortDrama` 和可选的 `continuousPlay`，不改写上游脚本或最低引擎版本。未声明类型的模块保持未指定；仅旧清单直链且没有提供类型时，Hub 不猜测脚本内容。依赖这些类型的模块需要 Rex 0.0.7 脚本引擎支持。
 
 ## 徽章包
 

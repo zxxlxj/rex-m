@@ -247,7 +247,18 @@ fn build(st: &Value, d: &Value, origin: &str) -> Value {
             }
         };
         refs.insert(id.clone(), r.clone());
-        widgets.push(json!({"id":id,"title":m["title"],"description":text(&m["description"]),"requiredVersion":meta("requiredVersion"),"version":meta("version"),"author":text(&m["author"]),"icon":text(&m["icon"]),"url":url}));
+        let mut widget = json!({"id":id,"title":m["title"],"description":text(&m["description"]),"requiredVersion":meta("requiredVersion"),"version":meta("version"),"author":text(&m["author"]),"icon":text(&m["icon"]),"url":url});
+        widget
+            .as_object_mut()
+            .unwrap()
+            .extend(crate::sources::content_metadata(
+                if mirror && snap["contentMetadataVersion"] == 1 {
+                    snap
+                } else {
+                    m
+                },
+            ));
+        widgets.push(widget);
     }
     if d["order"] != "source" {
         widgets.sort_by(|a, b| text(&a["title"]).cmp(text(&b["title"])));

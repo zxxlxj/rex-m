@@ -137,13 +137,16 @@ export function fetchMirrorBytes(url, previous) {
   return fetchSource(publicUrl(url), previous, { raw: true, timeoutMs: 8_000 });
 }
 
-const META = ['id', 'title', 'version', 'requiredVersion', 'author', 'icon', 'description'];
+export function contentMetadata(m){
+  return {...(['video','music','audiobook','shortDrama'].includes(m?.contentType)?{contentType:m.contentType}:{}),...(typeof m?.continuousPlay==='boolean'?{continuousPlay:m.continuousPlay}:{})};
+}
+const META = ['id', 'title', 'version', 'requiredVersion', 'author', 'icon', 'description', 'contentType', 'continuousPlay'];
 function manualMetadata(input, base) {
   if (input == null) return {};
   if (!object(input)) fail('手动元数据须为对象');
-  const result = Object.fromEntries(META.filter(k => own(input, k)).map(k => [k, text(input[k], k === 'icon' ? 2048 : k === 'description' ? 500 : 160, '手动元数据')]));
+  const result = Object.fromEntries(META.filter(k => own(input, k) && !['contentType','continuousPlay'].includes(k)).map(k => [k, text(input[k], k === 'icon' ? 2048 : k === 'description' ? 500 : 160, '手动元数据')]));
   if (result.icon) result.icon = publishUrl(result.icon, base, false);
-  return result;
+  return {...result,...contentMetadata(input)};
 }
 function moduleMeta(m, base, options = {}) {
   if (!object(m)) fail('模块元数据无效', 422);
@@ -151,6 +154,7 @@ function moduleMeta(m, base, options = {}) {
   if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(id)) fail('模块 ID 只能使用英文字母、数字、下划线、点和连字符', 422);
   const icon = options.js ? (m.iconurl ?? m.iconUrl ?? m.iconURL ?? m.icon) : (m.icon ?? m.iconurl ?? m.iconUrl ?? m.iconURL);
   return {
+    ...contentMetadata(m),
     id, title: text(m.title, 160, '模块标题', true), version: text(m.version, 48, '模块版本', true),
     requiredVersion: text(m.requiredVersion, 48, '模块所需版本', true), author: text(m.author, 120, '模块作者'),
     icon: icon ? publishUrl(icon, base, false) : text(icon, 2048, '图标网址'), description: text(m.description, 500, '模块描述')
@@ -314,7 +318,7 @@ export async function ingest(input, env, origin) {
   const meta = manualMetadata(input.metadata, result.effectiveUrl);
   const parsed = parseOnline(result.payload, u.href, result.effectiveUrl, meta);
   const { effectiveUrl, etag, lastModified } = result;
-  return { ...source, ...parsed, url: u.href, label: parsed.label || u.hostname, status: '正常', checkedAt: now(), effectiveUrl, etag, lastModified, manualMetadata: meta };
+  return { ...source, ...parsed, url: u.href, label: parsed.label || u.hostname, status: '正常', checkedAt: now(), contentMetadataVersion:1, effectiveUrl, etag, lastModified, manualMetadata: meta };
 }
 
 const override = m => ({ paused: !!m.paused, disabled: !!m.disabled, categoryId: m.categoryId || '' });
@@ -340,9 +344,9 @@ function reconcile(previous, incoming) {
 export async function refresh(source, env, _origin) {
   if (source.paused || !source.url) return source;
   const u = sourceUrl(source.url);
-  const result = await fetchSource(u, Object.hasOwn(source,'icon')?source:undefined);
+  const result = await fetchSource(u, source.contentMetadataVersion===1?source:undefined);
   const { effectiveUrl, etag, lastModified } = result;
-  const info = { checkedAt: now(), effectiveUrl, etag, lastModified, status: '正常' };
+  const info = { checkedAt: now(), effectiveUrl, etag, lastModified, status: '正常', contentMetadataVersion:1 };
   if (result.unchanged) return { ...source, ...info };
   const parsed = parseOnline(result.payload, u.href, effectiveUrl, source.manualMetadata || {});
   if (source.kind && source.kind !== parsed.kind) fail('来源内容类型已变化，需重新导入', 422);

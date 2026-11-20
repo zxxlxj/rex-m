@@ -1,3 +1,4 @@
+import { contentMetadata } from './sources.mjs';
 export const MAX_SOURCES = 20, MAX_ITEMS = 160, MAX_DISTS = 20;
 export class Problem extends Error { constructor(status,message){super(message);this.status=status;} }
 export function fail(status,message){throw new Problem(status,message);}
@@ -36,7 +37,7 @@ export function build(state,d,origin){
     if(mirror&&!file?.url)missingMirrors.push({id:m.id,title:m.title,source:s.label});
     if(file?.url)files[m.id]=file.url;
     refs[m.id]=ref(s,m);
-    return {id:m.id,title:m.title,description:m.description||'',requiredVersion:file?.requiredVersion||m.requiredVersion,version:file?.version||m.version,author:m.author||'',icon:m.icon||'',url:mirror?(file?.url?`${origin}/m/${encodeURIComponent(d.key)}/${encodeURIComponent(m.id)}.js`:''):m.url};
+    return {...contentMetadata(file?.contentMetadataVersion===1?file:m),id:m.id,title:m.title,description:m.description||'',requiredVersion:file?.requiredVersion||m.requiredVersion,version:file?.version||m.version,author:m.author||'',icon:m.icon||'',url:mirror?(file?.url?`${origin}/m/${encodeURIComponent(d.key)}/${encodeURIComponent(m.id)}.js`:''):m.url};
   });
   return {manifest:{name:d.title,title:d.title,description:d.description||'',icon,logo:icon,widgets},files,refs,missingMirrors,conflicts,blocked:[...unresolved]};
 }

@@ -26,10 +26,11 @@ assert request('/api/session')['authenticated']
 request('/api/category', {'name': '测试'})
 cat = request('/api/state')['categories'][0]['id']
 request('/api/distribution', {'key': 'test-hub', 'title': 'Smoke', 'mode': 'rules', 'categoryIds': [cat], 'enabled': True, 'publish': True, 'confirmEmpty': True})
-module = 'var WidgetMetadata = {id:"rex.smoke",title:"Smoke",version:"1.0.0",requiredVersion:"0.0.6",modules:[]};'
+module = 'var WidgetMetadata = {id:"rex.smoke",title:"Smoke",version:"1.0.0",requiredVersion:"0.0.7",contentType:"music",continuousPlay:false,modules:[]};'
 src = request('/api/source', {'categoryId': cat, 'files': [{'name': 'smoke.js', 'text': module}]}, status=201)['source']
 manifest = request('/s/test-hub.rex')
 assert manifest['widgets'][0]['id'] == 'rex.smoke'
+assert manifest['widgets'][0]['contentType'] == 'music' and manifest['widgets'][0]['continuousPlay'] is False
 path = manifest['widgets'][0]['url'].removeprefix(origin)
 assert request(path, decoder=bytes).decode() == module
 request('/api/source/batch', {'ids': [src['id']], 'action': 'delete'})

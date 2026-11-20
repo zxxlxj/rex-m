@@ -130,3 +130,20 @@ test('matching imports, batch checks and batch deletion update published rules w
  await req('/api/source/batch',{ids:[local.id,...ids],action:'delete'});
  assert.equal((await req('/s/auto-hub.rex')).parse().widgets.length,0);
 });
+
+test('Rex 0.0.7 content declarations survive upload, mirror and publish without guessing',async t=>{
+ const old=globalThis.fetch;t.after(()=>{globalThis.fetch=old;});
+ const withType=(id,type)=>js.replace('test.alpha',id).replace('modules:[]',`contentType:'${type}', continuousPlay:false, modules:[]`).replace('0.0.6','0.0.7');
+ const req=fixture(t);await req('/api/setup',{token:secret,password:'A long test password!'},201);
+ const index='https://example.com/types.rex', leaf='https://example.com/music.js';
+ globalThis.fetch=async u=>u===index?Response.json({widgets:[{id:'test.music',title:'Music',version:'1',requiredVersion:'0.0.7',url:leaf}]}):new Response(withType('test.music','music'));
+ const remote=(await req('/api/source',{url:index,delivery:'mirror'},201)).parse().source;
+ assert.equal(remote.modules[0].mirror.contentType,'music');
+ const local=(await req('/api/source',{files:[{name:'audio.js',text:withType('test.audio','audiobook')},{name:'drama.js',text:withType('test.drama','shortDrama')},{name:'old.js',text:js}]},201)).parse().source;
+ await req('/api/distribution',{...settings,key:'types',sourceIds:[remote.id,local.id],publish:true});
+ const widgets=Object.fromEntries((await req('/s/types.rex')).parse().widgets.map(m=>[m.id,m]));
+ for(const [id,kind] of [['test.music','music'],['test.audio','audiobook'],['test.drama','shortDrama']]){
+   assert.equal(widgets[id].contentType,kind);assert.equal(widgets[id].continuousPlay,false);assert.equal(widgets[id].requiredVersion,'0.0.7');
+ }
+ assert.ok(!Object.hasOwn(widgets['test.alpha'],'contentType'));
+});
