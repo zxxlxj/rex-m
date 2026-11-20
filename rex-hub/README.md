@@ -9,6 +9,16 @@
 
 把多个 Rex 模块或 `.rex` 合集拆开、重新分类，再生成一个或多个固定分发链接。支持上传文件、上游直链或下载托管、按来源和模块设刷新间隔、发布预览，以及在后台修改管理员密码。
 
+## Docker 成品镜像
+
+公开镜像，无需登录 GHCR，支持 `linux/amd64` 和 `linux/arm64`：
+
+```bash
+docker pull ghcr.io/zxxlxj/rex-hub:0.0.2
+```
+
+启动命令和 NAS／HTTPS 配置见 [Docker 部署说明](./DOCKER.md)。
+
 ## 一键部署到 Cloudflare
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fzxxlxj%2Frex-m%2Ftree%2Fmain%2Frex-hub)

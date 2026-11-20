@@ -59,4 +59,4 @@ https://raw.githubusercontent.com/zxxlxj/rex-m/main/mania.rex
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fzxxlxj%2Frex-m%2Ftree%2Fmain%2Frex-hub)
 
-[中文部署与使用说明](./rex-hub/README.md) · [Docker 自托管版](./rex-hub/DOCKER.md)
+[中文部署与使用说明](./rex-hub/README.md) · [Docker 自托管版](./rex-hub/DOCKER.md) · 成品镜像：`ghcr.io/zxxlxj/rex-hub:0.0.2`
