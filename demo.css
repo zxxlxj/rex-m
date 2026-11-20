@@ -1,0 +1,1 @@
+body{display:flex;min-height:100dvh;flex-direction:column}#app{flex:1;min-width:0}.demo-footer{padding:0 12px 20px;text-align:center;font-size:11px;color:var(--lg-secondary,#666)}@media(max-width:760px){#app .page{padding-bottom:24px}.demo-footer{padding-bottom:calc(92px + env(safe-area-inset-bottom))}}
