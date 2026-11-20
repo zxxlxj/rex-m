@@ -147,3 +147,18 @@ test('Rex 0.0.7 content declarations survive upload, mirror and publish without 
  }
  assert.ok(!Object.hasOwn(widgets['test.alpha'],'contentType'));
 });
+
+test('batch category moves are atomic and publish already active category rules',async t=>{
+ const req=fixture(t);await req('/api/setup',{token:secret,password:'A long test password!'},201);
+ await req('/api/category',{name:'旧分类'});await req('/api/category',{name:'新分类'});
+ const [oldCat,newCat]=(await req('/api/state')).parse().categories;
+ const uploaded=(await req('/api/source',{categoryId:oldCat.id,files:[{name:'a.js',text:js},{name:'b.js',text:js.replace('test.alpha','test.beta')}]},201)).parse().source;
+ for(const [key,cat] of [['before',oldCat],['after',newCat]])await req('/api/distribution',{...settings,key,categoryIds:[cat.id],publish:true,confirmEmpty:true});
+ const modules=uploaded.modules.map(m=>({id:m.id,sourceId:uploaded.id}));
+ await req('/api/module/batch-category',{categoryId:newCat.id,modules:[modules[0],{sourceId:uploaded.id,id:'gone'}]},404);
+ assert.equal((await req('/s/before.rex')).parse().widgets.length,2);
+ assert.equal((await req('/api/state')).parse().sources[0].modules[0].categoryId,'');
+ assert.equal((await req('/api/module/batch-category',{categoryId:newCat.id,modules:[...modules,modules[0]]})).parse().count,2);
+ assert.equal((await req('/s/before.rex')).parse().widgets.length,0);assert.equal((await req('/s/after.rex')).parse().widgets.length,2);
+ await req('/api/module/batch-category',{categoryId:'',modules});assert.equal((await req('/s/before.rex')).parse().widgets.length,2);
+});

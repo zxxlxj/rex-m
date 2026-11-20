@@ -13,6 +13,8 @@ let session, state = blank(), page = 'home', busy = false, timer, returnFocus;
 const expanded = new Set(), openSettings = new Set(), openModules = new Set(), moduleSearch = new Map();
 const selectedSources = new Set(), batchDeleteSources = new WeakMap();
 let sourceSearch = '', selectingSources = false;
+const selectedModules=new Map();
+let selectingModules=false;
 let sourceMode = 'groups', categorySearch = '', categoryFilter = '', typeFilter = '', categoryManagerOpen = false;
 const contentTypes = Object.freeze({video:'视频', music:'音乐', audiobook:'有声书', shortDrama:'短剧'});
 const contentType = (m,s) => {const type=m.mirror?.contentMetadataVersion===1 && s && sourceMirrorEnabled(s,m) ? m.mirror.contentType : m.contentType;return Object.hasOwn(contentTypes,type) ? type : '';};
@@ -58,7 +60,7 @@ function categorySelect(current, attrs='', placeholder='未分类') { return `<s
 function formError() { return '<p class="error" data-error role="alert"></p>'; }
 function renderAuth() {
   selectingSources=false;selectedSources.clear();
-  sourceMode='groups';categorySearch='';categoryFilter='';typeFilter='';categoryManagerOpen=false;
+  sourceMode='groups';categorySearch='';categoryFilter='';typeFilter='';categoryManagerOpen=false;selectingModules=false;selectedModules.clear();
   unmountBadges?.();unmountBadges=undefined;
   const setup = !session.initialized;
   app.innerHTML = `<main class="auth-screen"><section class="auth glass pad stack">${brand()}<header><span class="eyebrow">${setup?'FIRST RUN':'WELCOME BACK'}</span><h1>${setup?'初始化控制台':'欢迎回来'}</h1><p>${setup?'输入部署时配置的初始化令牌，并为控制台设置密码。':'使用管理密码登录，管理 REX 来源与分发。'}</p></header><form class="stack" data-form="${setup?'setup':'login'}">${setup?field('初始化令牌',input('token','','type="password" required autocomplete="off"')):''}${field('管理密码',input('password','',`type="password" required autocomplete="${setup?'new-password':'current-password'}"`))}${formError()}${submit(setup?'初始化':'登录控制台')}</form></section></main>`;
@@ -174,13 +176,14 @@ function renderSourceCategories() {
     const meta=[label(s),m.version?`v${m.version}`:'',m.pending?'待审核':'',m.removed?'上游已移除':'',m.disabled?'已禁用':'',m.paused?'已暂停':''].filter(Boolean).join(' · ');
     const search=[title,m.id,group.title,meta,type,contentTypes[type]].join(' ').toLowerCase();
     const attrs=`data-change="module-category" data-id="${E(m.id)}" data-source="${E(s.id)}" aria-label="${E(`修改模块分类：${title}（${label(s)}）`)}"`;
-    group.rows.push(`<li class="library-category-row" data-search="${E(search)}" data-content-type="${type}"><span class="library-text"><strong title="${E(title)}">${E(title)}</strong><small title="${E(meta)}">${E(meta)}</small></span>${contentBadge(type)}<div class="library-category-assignment">${categorySelect(m.categoryId,attrs,'继承来源')}</div></li>`);
+    const ref=`${s.id}:${m.id}`;
+    group.rows.push(`<li class="library-category-row" data-module-ref="${E(ref)}" data-source-id="${E(s.id)}" data-module-id="${E(m.id)}" data-search="${E(search)}" data-content-type="${type||'unspecified'}">${selectingModules?`<input type="checkbox" data-change="category-module-select" aria-label="${E(`选择 ${title}`)}"${checked(selectedModules.has(ref))}>`:``}<span class="library-text"><strong title="${E(title)}">${E(title)}</strong><small title="${E(meta)}">${E(meta)}</small></span>${contentBadge(type)}<div class="library-category-assignment">${categorySelect(m.categoryId,attrs,'继承来源')}</div></li>`);
   }
-  const filters=`<div class="library-category-filters"><input type="search" data-filter="category-modules" aria-label="搜索模块" placeholder="搜索模块或来源" autocomplete="off" value="${E(categorySearch)}">${field('分类',`<select data-change="category-filter"><option value="">全部分类</option>${allGroups.map(g=>`<option value="${E(g.key)}"${selected(g.key===categoryFilter)}>${E(g.title)}</option>`).join('')}</select>`)}${field('内容类型',`<select data-change="category-type-filter"><option value="">全部类型</option>${Object.entries(contentTypes).map(([key,title])=>`<option value="${key}"${selected(key===typeFilter)}>${title}</option>`).join('')}</select>`)}</div>`;
+  const filters=`<div class="library-category-filters"><input type="search" data-filter="category-modules" aria-label="搜索模块" placeholder="搜索模块或来源" autocomplete="off" value="${E(categorySearch)}">${field('分类',`<select data-change="category-filter"><option value="">全部分类</option>${allGroups.map(g=>`<option value="${E(g.key)}"${selected(g.key===categoryFilter)}>${E(g.title)}</option>`).join('')}</select>`)}${field('模块声明',`<select data-change="category-type-filter"><option value="">全部类型</option><option value="unspecified"${selected(typeFilter==='unspecified')}>未指定</option>${Object.entries(contentTypes).map(([key,title])=>`<option value="${key}"${selected(key===typeFilter)}>${title}</option>`).join('')}</select>`)}</div>`;
   const managerRows=state.categories.map(c=>`<div class="library-category-entry row spread"><strong class="wrap grow">${E(c.name)}</strong><div class="row">${btn('重命名','edit-category',`data-id="${E(c.id)}" aria-label="${E(`重命名分类：${c.name}`)}"`)}${btn('删除','delete-category',`data-id="${E(c.id)}" aria-label="${E(`删除分类：${c.name}`)}"`,'danger')}</div></div>`).join('')||empty('尚未添加分类。');
   const manager=`<details class="glass library-category-manager" data-category-manager${categoryManagerOpen?' open':''}><summary><span>管理分类 <small>${state.categories.length}</small></span><i class="chevron" aria-hidden="true"></i></summary><div class="library-category-entries">${managerRows}</div></details>`;
   const groupsHtml=allGroups.filter(g=>g.rows.length).map(g=>`<section class="library-category-group" data-category-group="${E(g.key)}"><h2>${E(g.title)}</h2><ul>${g.rows.join('')}</ul></section>`).join('');
-  return `<header class="library-head row spread"><h1>来源</h1>${btn('＋ 新建分类','edit-category','','primary')}</header>${sourceViewTabs()}<div id="source-view" class="stack library-category-view" role="tabpanel" aria-labelledby="source-tab-categories">${manager}<section class="glass library-category-panel" aria-label="分类模块">${filters}<p class="library-category-count" data-category-count role="status"></p>${groupsHtml}<p class="empty" data-category-empty hidden></p></section></div>`;
+  return `<header class="library-head row spread"><h1>来源</h1><div class="row">${btn(selectingModules?'完成':'多选','module-select-mode',`aria-pressed="${selectingModules}"`)}${btn('＋ 新建分类','edit-category','','primary')}</div></header>${sourceViewTabs()}<div id="source-view" class="stack library-category-view" role="tabpanel" aria-labelledby="source-tab-categories">${manager}<section class="glass library-category-panel" aria-label="分类模块">${filters}${selectingModules?`<div class="library-batch row"><small data-module-selection role="status"></small>${btn('全选筛选结果','module-select-visible')}${btn('清空','module-clear-selection')}${btn('调整分类','module-batch-category','disabled','primary')}</div>`:``}<p class="library-category-count" data-category-count role="status"></p>${groupsHtml}<p class="empty" data-category-empty hidden></p></section></div>`;
 }
 function filterCategoryModules(){
   const view=$('.library-category-view',app);if(!view)return;
@@ -199,6 +202,8 @@ function filterCategoryModules(){
   }
   $('[data-category-count]',view).textContent=`${visible} 个模块`;
   const noMatch=$('[data-category-empty]',view);
+  const selection=$('[data-module-selection]',view);
+  if(selection){const hidden=selectedModules.size-[...view.querySelectorAll('.library-category-row:not([hidden])')].filter(row=>selectedModules.has(row.dataset.moduleRef)).length;selection.textContent=`已选 ${selectedModules.size} 项${hidden?`（${hidden} 项不在当前筛选结果）`:``}`;$('[data-act="module-batch-category"]',view).disabled=!selectedModules.size||busy;}
   noMatch.hidden=visible>0;
   noMatch.textContent=categoryFilter&&!query&&!typeFilter?'此分类暂无模块。':!total&&!query&&!typeFilter?'暂无模块。':'没有匹配的模块。';
 }
@@ -448,6 +453,11 @@ const forms={
     await save('source',data,'已导入。','sources');
   },
   async approve(fd,form){const {id,source}=form.dataset;await save('module/update',{id,sourceId:source,approve:true,categoryId:text(fd,'categoryId')},'审核通过。');},
+  async 'category-batch'(fd){
+    const modules=[...selectedModules.values()];if(!modules.length)return;
+    await api('module/batch-category',{modules,categoryId:text(fd,'categoryId')});
+    dialog.close();selectedModules.clear();selectingModules=false;await load();render();toast(`已调整 ${modules.length} 个模块的分类`);
+  },
   async category(fd,form){const id=form.dataset.id; await save('category',{...(id?{id}:{}),name:text(fd,'name')},'分类已保存。');},
   async distribution(fd,form,intent){
     const publish=intent!=='draft', confirm=publish&&intent==='confirm';
@@ -545,6 +555,10 @@ async function submitSourceBatch(action, ids){
   }
 }
 const actions={
+  'module-select-mode'(){selectingModules=!selectingModules;if(!selectingModules)selectedModules.clear();render();$('[data-act="module-select-mode"]',app)?.focus({preventScroll:true});},
+  'module-select-visible'(){for(const row of app.querySelectorAll('.library-category-row:not([hidden])')){selectedModules.set(row.dataset.moduleRef,{sourceId:row.dataset.sourceId,id:row.dataset.moduleId});$('input[type=checkbox]',row).checked=true;}filterCategoryModules();},
+  'module-clear-selection'(){selectedModules.clear();for(const i of app.querySelectorAll('[data-change="category-module-select"]'))i.checked=false;filterCategoryModules();},
+  'module-batch-category'(){if(!selectedModules.size)return;showDialog('调整分类',`<form class="stack" data-form="category-batch"><p>为已选的 ${selectedModules.size} 个模块设置分类。</p>${field('目标分类',categorySelect('','name="categoryId"','继承各自来源的分类'))}${formError()}${submit('应用')}</form>`);},
   'source-multiselect'(){
     selectingSources=!selectingSources;
     if(!selectingSources)selectedSources.clear();
@@ -622,7 +636,7 @@ function asyncAction(work,scope){
 document.addEventListener('click',event=>{
   const b=event.target.closest?.('button[data-act]'); if(!b||busy)return;
   const {act,id}=b.dataset;
-  if(['nav','source-view','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module','source-multiselect','source-select-visible','source-select-clear','source-batch-delete'].includes(act)){
+  if(['nav','source-view','module-select-mode','module-select-visible','module-clear-selection','module-batch-category','log-page','close','import','edit-distribution','edit-category','delete-category','delete-source','delete-distribution','toggle-distribution','replace-source','approve-module','source-multiselect','source-select-visible','source-select-clear','source-batch-delete'].includes(act)){
     actions[act](b,id,state.distributions.find(d=>d.id===id));return;
   }
   if(act==='retry'){asyncAction(()=>boot());return;}
@@ -683,6 +697,7 @@ document.addEventListener('change',event=>{
     if(!busy&&selectingSources){if(el.checked)selectedSources.add(id);else selectedSources.delete(id);}
     refreshSourceSelection();return;
   }
+  if(change==='category-module-select'){const row=el.closest('[data-module-ref]');if(!row)return;const d=row.dataset;if(busy){el.checked=selectedModules.has(d.moduleRef);return;}if(el.checked)selectedModules.set(d.moduleRef,{sourceId:d.sourceId,id:d.moduleId});else selectedModules.delete(d.moduleRef);filterCategoryModules();return;}
   if(change==='category-filter'||change==='category-type-filter'){
     if(change==='category-filter')categoryFilter=el.value;else typeFilter=el.value;
     filterCategoryModules();return;

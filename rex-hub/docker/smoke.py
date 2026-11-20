@@ -33,6 +33,13 @@ assert manifest['widgets'][0]['id'] == 'rex.smoke'
 assert manifest['widgets'][0]['contentType'] == 'music' and manifest['widgets'][0]['continuousPlay'] is False
 path = manifest['widgets'][0]['url'].removeprefix(origin)
 assert request(path, decoder=bytes).decode() == module
+request('/api/category', {'name': '新分类'})
+new_cat = request('/api/state')['categories'][1]['id']
+refs = [{'sourceId': src['id'], 'id': 'rex.smoke'}]
+assert request('/api/module/batch-category', {'modules': refs, 'categoryId': new_cat})['count'] == 1
+assert request('/s/test-hub.rex')['widgets'] == []
+request('/api/module/batch-category', {'modules': refs, 'categoryId': ''})
+assert len(request('/s/test-hub.rex')['widgets']) == 1
 request('/api/source/batch', {'ids': [src['id']], 'action': 'delete'})
 assert request('/s/test-hub.rex')['widgets'] == []
 request(path, status=404)

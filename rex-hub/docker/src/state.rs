@@ -893,6 +893,28 @@ pub async fn api(
             options(s, a, false)?;
             s["edit"] = json!(id());
             republish(st, &app.origin, false);
+        } else if path == "/api/module/batch-category" {
+            let cat = category(st, &a["categoryId"])?;
+            let rows = a["modules"]
+                .as_array()
+                .filter(|v| !v.is_empty() && v.len() <= 5000)
+                .ok_or_else(|| err(400, "请选择模块"))?;
+            let mut seen = HashSet::new();
+            let mut touched = HashSet::new();
+            for row in rows {
+                let i = index(&st["sources"], text(&row["sourceId"]))?;
+                let j = index(&st["sources"][i]["modules"], text(&row["id"]))?;
+                if seen.insert((i, j)) {
+                    st["sources"][i]["modules"][j]["categoryId"] = json!(cat);
+                    touched.insert(i);
+                }
+            }
+            for i in touched {
+                st["sources"][i]["edit"] = json!(id());
+            }
+            republish(st, &app.origin, true);
+            log(st, format!("已批量调整 {} 个模块的分类", seen.len()));
+            return Ok(json!({"ok":true,"count":seen.len()}));
         } else if path == "/api/module/update" {
             let i = index(&st["sources"], text(&a["sourceId"]))?;
             let j = index(&st["sources"][i]["modules"], &idv)?;

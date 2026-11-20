@@ -239,6 +239,14 @@ async function admin(req,env,url){
         sourceOptions(s,a);
         s.edit=uid();
       }
+    }else if(path==='/api/module/batch-category'){
+      const cat=category(st,a.categoryId), touched=new Set();
+      if(!Array.isArray(a.modules)||!a.modules.length||a.modules.length>5000)fail(400,'请选择模块');
+      const seen=new Set();
+      for(const item of a.modules){if(!item||typeof item.id!=='string'||typeof item.sourceId!=='string')fail(400,'模块格式无效');const s=by(st.sources,item.sourceId,'来源'),m=by(s.modules,item.id,'模块');const ref=`${s.id}:${m.id}`;if(seen.has(ref))continue;seen.add(ref);m.categoryId=cat;touched.add(s);}
+      for(const s of touched)s.edit=uid();
+      republish(st,originFor(env,st,origin),{allowRemoval:true});appendLog(st,`已批量调整 ${seen.size} 个模块的分类`);
+      return {ok:true,count:seen.size};
     }else if(path==='/api/module/update'){
       const s=by(st.sources,a.sourceId,'来源'),m=by(s.modules,a.id,'模块');
       markFiles(s,originFor(env,st,origin));

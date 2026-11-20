@@ -1,6 +1,6 @@
 # Rex Hub · 模块聚合与分发
 
-**当前版本：`0.0.3`**
+**当前版本：`0.0.4`**
 
 可选 **[Docker 自托管](./DOCKER.md)** 或 **[Cloudflare Worker](#一键部署到-cloudflare)**。下面的免费额度提示只适用于 Cloudflare 版。
 
@@ -14,7 +14,7 @@
 公开镜像，无需登录 GHCR，支持 `linux/amd64` 和 `linux/arm64`：
 
 ```bash
-docker pull ghcr.io/zxxlxj/rex-hub:0.0.3
+docker pull ghcr.io/zxxlxj/rex-hub:0.0.4
 ```
 
 启动命令和 NAS／HTTPS 配置见 [Docker 部署说明](./DOCKER.md)。
@@ -38,7 +38,7 @@ docker pull ghcr.io/zxxlxj/rex-hub:0.0.3
 
 ## 来源分类与 Rex 内容类型
 
-来源页可切换到「分类」，按分类或内容类型浏览、搜索及改分组，也可在这里新增、重命名或删除分类。Hub 保留 [Rex 官方声明](https://modules.rexnow.app/guide/#content-type) `video`、`music`、`audiobook`、`shortDrama` 和可选的 `continuousPlay`，不改写上游脚本或最低引擎版本。未声明类型的模块保持未指定；仅旧清单直链且没有提供类型时，Hub 不猜测脚本内容。依赖这些类型的模块需要 Rex 0.0.7 脚本引擎支持。
+来源页可切换到「分类」，按分类、模块声明和关键词组合筛选，可多选或全选筛选结果，一次调整分类，也可在这里新增、重命名或删除分类。Hub 保留 [Rex 官方声明](https://modules.rexnow.app/guide/#content-type) `video`、`music`、`audiobook`、`shortDrama` 和可选的 `continuousPlay`，不改写上游脚本或最低引擎版本。未声明类型的模块保持未指定；仅旧清单直链且没有提供类型时，Hub 不猜测脚本内容。依赖这些类型的模块需要 Rex 0.0.7 脚本引擎支持。
 
 ## 徽章包
 
