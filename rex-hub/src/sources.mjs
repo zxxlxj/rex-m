@@ -137,8 +137,9 @@ export function fetchMirrorBytes(url, previous) {
   return fetchSource(publicUrl(url), previous, { raw: true, timeoutMs: 8_000 });
 }
 
+export const CONTENT_TYPES = Object.freeze(['video','music','audiobook','shortDrama']);
 export function contentMetadata(m){
-  return {...(['video','music','audiobook','shortDrama'].includes(m?.contentType)?{contentType:m.contentType}:{}),...(typeof m?.continuousPlay==='boolean'?{continuousPlay:m.continuousPlay}:{})};
+  return {...(CONTENT_TYPES.includes(m?.contentType)?{contentType:m.contentType}:{}),...(typeof m?.continuousPlay==='boolean'?{continuousPlay:m.continuousPlay}:{})};
 }
 const META = ['id', 'title', 'version', 'requiredVersion', 'author', 'icon', 'description', 'contentType', 'continuousPlay'];
 function manualMetadata(input, base) {
@@ -180,7 +181,8 @@ function indexData(payload) {
   if (!object(index) || !own(index, 'widgets') || !Array.isArray(index.widgets)) fail('合集必须包含 widgets 数组（允许为空）', 422);
   if (index.widgets.length > MAX_ITEMS) fail(`每个来源最多 ${MAX_ITEMS} 个模块`, 413);
   const label = text(index.title ?? index.name, 160, '合集标题');
-  return { rows: index.widgets, label, icon: index.icon || index.logo || index.iconURL || '' };
+  const author = typeof index.author === 'string' && index.author.length <= 120 && !BAD_CONTROL.test(index.author) ? index.author.trim() : '';
+  return { rows: index.widgets, label, author, icon: index.icon || index.logo || index.iconURL || '' };
 }
 function sourceIcon(value,base){try{return value?publishUrl(value,base,false):'';}catch{return '';}}
 function assertRow(row) {
@@ -197,16 +199,16 @@ function unique(modules) {
 }
 function parseOnline(payload, source, effective, manual) {
   if (/\.(?:rex|json)\/?$/i.test(decodeURIComponent(new URL(effective).pathname)) || /\.(?:rex|json)\/?$/i.test(decodeURIComponent(new URL(source).pathname)) || /^[\s\uFEFF]*[\[{]/.test(payload)) {
-    const { rows, label, icon } = indexData(payload);
+    const { rows, label, author, icon } = indexData(payload);
     const modules = unique(rows.map(row => {
       const url = publishUrl(assertRow(row), effective, true);
       if (url === effective || url === source) fail('合集不能引用自身', 422);
       return moduleOf(moduleMeta(row, effective), url);
     }));
-    return { modules, label, icon:sourceIcon(icon,effective), kind: 'online-index' };
+    return { modules, label, author, icon:sourceIcon(icon,effective), kind: 'online-index' };
   }
   const meta = jsMeta(payload, effective, manual);
-  return { modules: [moduleOf(meta, effective)], label: meta.title, icon:meta.icon, kind: 'online-module' };
+  return { modules: [moduleOf(meta, effective)], label: meta.title, author:meta.author, icon:meta.icon, kind: 'online-module' };
 }
 
 function importFiles(files) {
@@ -268,10 +270,11 @@ async function parseUpload(input, env, origin) {
     stored.set(path.slice(1), file.bytes);
     return moduleOf(meta, localOrigin + path);
   }
-  const modules = []; let label, icon;
+  const modules = []; let label, author, icon;
   if (indexes.length) {
     const index = indexData(indexes[0].payload);
     label = index.label || indexes[0].name;
+    author = index.author;
     icon=sourceIcon(index.icon,base);
     const byName = new Map(js.map(f => [f.name, f]));
     for (const row of index.rows) {
@@ -302,7 +305,7 @@ async function parseUpload(input, env, origin) {
     try { for (const [key, bytes] of stored) await env.FILES.put(key, bytes, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=86400, immutable' } }); }
     catch { fail('无法保存上传文件', 503); }
   }
-  return { modules, label, icon:icon||modules[0]?.icon||'', kind: indexes.length ? 'upload-index' : 'upload-modules' };
+  return { modules, label, author:author??(modules.length===1?modules[0].author:''), icon:icon||modules[0]?.icon||'', kind: indexes.length ? 'upload-index' : 'upload-modules' };
 }
 
 const now = () => new Date().toISOString();
@@ -321,7 +324,7 @@ export async function ingest(input, env, origin) {
   return { ...source, ...parsed, url: u.href, label: parsed.label || u.hostname, status: '正常', checkedAt: now(), contentMetadataVersion:1, effectiveUrl, etag, lastModified, manualMetadata: meta };
 }
 
-const override = m => ({ paused: !!m.paused, disabled: !!m.disabled, categoryId: m.categoryId || '' });
+const override = m => ({ paused: !!m.paused, disabled: !!m.disabled, categoryId: m.categoryId || '', ...(m.autoCategoryFallbackId&&{autoCategoryFallbackId:m.autoCategoryFallbackId}) });
 const RETAIN_MS = 30 * 24 * 60 * 60 * 1000;
 function reconcile(previous, incoming) {
   const time = Date.now();
@@ -335,7 +338,7 @@ function reconcile(previous, incoming) {
   for (const m of old.values()) {
 
     if (m.paused) modules.push({ ...m, removed: true });
-    else if (m.disabled || m.categoryId) tombs.set(m.id, { id: m.id, ...override(m), until: time + RETAIN_MS });
+    else if (m.disabled || m.categoryId || m.autoCategoryFallbackId) tombs.set(m.id, { id: m.id, ...override(m), until: time + RETAIN_MS });
   }
   const moduleOverrides = [...tombs.values()].sort((a, b) => b.until - a.until).slice(0, MAX_ITEMS);
   if (modules.length > MAX_ITEMS) fail('上游模块与已暂停模块合计超过来源上限', 413);
@@ -344,11 +347,11 @@ function reconcile(previous, incoming) {
 export async function refresh(source, env, _origin) {
   if (source.paused || !source.url) return source;
   const u = sourceUrl(source.url);
-  const result = await fetchSource(u, source.contentMetadataVersion===1?source:undefined);
+  const result = await fetchSource(u, source.contentMetadataVersion===1&&typeof source.author==='string'?source:undefined);
   const { effectiveUrl, etag, lastModified } = result;
   const info = { checkedAt: now(), effectiveUrl, etag, lastModified, status: '正常', contentMetadataVersion:1 };
   if (result.unchanged) return { ...source, ...info };
   const parsed = parseOnline(result.payload, u.href, effectiveUrl, source.manualMetadata || {});
   if (source.kind && source.kind !== parsed.kind) fail('来源内容类型已变化，需重新导入', 422);
-  return { ...source, ...info, kind: parsed.kind, icon:parsed.icon, ...reconcile(source, parsed.modules) };
+  return { ...source, ...info, kind: parsed.kind, label:parsed.label||u.hostname, author:parsed.author, icon:parsed.icon, ...reconcile(source, parsed.modules) };
 }

@@ -3,7 +3,7 @@ import { ingest, refresh } from './sources.mjs';
 import { mirrorSource, mirrorDue } from './mirror.mjs';
 import { markFiles, removeSource, removableFiles } from './file-lifecycle.mjs';
 import { badgeApi, badgePublic, badgeTick } from './badges.mjs';
-import { MAX_SOURCES, MAX_ITEMS, MAX_DISTS, fail, randomKey, keyOK, build, blockedRemoval, appendLog, publishedConfig, republish, applyNewPolicy, intervals, recordPublish } from './model.mjs';
+import { MAX_SOURCES, MAX_ITEMS, MAX_DISTS, fail, randomKey, keyOK, build, blockedRemoval, appendLog, publishedConfig, republish, applyNewPolicy, intervals, recordPublish, categoryResolver, normalizeAutoRule } from './model.mjs';
 
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:JSON_HEADERS});
@@ -150,7 +150,12 @@ async function admin(req,env,url){
   if(req.method==='POST'&&path==='/api/logout')return logout(req,env,await input(req,16384));
   if(!(await session(req,env)).authenticated)fail(401,'请先登录');
   if(path==='/api/badges'||path.startsWith('/api/badges/'))return badgeApi(req,env,url,req.method==='POST'?await input(req,10_800_000):undefined);
-  if(req.method==='GET'&&path==='/api/state')return json((await get(env)).st);
+  if(req.method==='GET'&&path==='/api/state'){
+    const {st}=await get(env);
+    const classify=categoryResolver(st,originFor(env,st,origin));
+    return json({...st,categories:st.categories.map(c=>({...c,autoRule:normalizeAutoRule(c.autoRule)})),
+      sources:st.sources.map(s=>({...s,modules:s.modules.map(m=>({...m,effectiveCategoryId:classify(s,m)}))}))});
+  }
   if(req.method==='GET'&&path==='/api/preview'){
     const {st}=await get(env);const d=by(st.distributions,url.searchParams.get('id'),'分发');
     const next=build(st,d,originFor(env,st,origin));
@@ -187,7 +192,7 @@ async function admin(req,env,url){
         const old=by(current.sources,a.replaceId,'来源');
         if(old.url || source.url)fail(422,'替换上传仅用于本地文件来源');
         const incoming=new Map(source.modules.map(m=>[m.id,m]));
-        for(const m of old.modules){const n=incoming.get(m.id);if(m.paused)incoming.set(m.id,{...m,removed:!n});else if(n)Object.assign(n,{categoryId:m.categoryId,disabled:m.disabled,paused:false});}
+        for(const m of old.modules){const n=incoming.get(m.id);if(m.paused)incoming.set(m.id,{...m,removed:!n});else if(n)Object.assign(n,{categoryId:m.categoryId,autoCategoryFallbackId:m.autoCategoryFallbackId,disabled:m.disabled,paused:false});}
         source.modules=[...incoming.values()];if(source.modules.length>MAX_ITEMS)fail(409,'模块超过单个来源上限');
         Object.assign(source,{id:old.id,paused:old.paused,categoryId:source.categoryId||old.categoryId});
         current.sources[current.sources.indexOf(old)]=markFiles({...source,edit:uid()},originFor(env,current,origin),old);
@@ -228,12 +233,13 @@ async function admin(req,env,url){
   }
   return json(await change(env,st=>{
     st.origin ||= origin;
+    let allowCategoryRemoval=false;
     if(path==='/api/source/update'){
       const s=by(st.sources,a.id,'来源');
       if(a.delete===true)st.sources=st.sources.filter(x=>x!==s);
       else {
         if(typeof a.paused==='boolean')s.paused=a.paused;
-        if('categoryId'in a)s.categoryId=category(st,a.categoryId);
+        if('categoryId'in a){const next=category(st,a.categoryId);allowCategoryRemoval=(s.categoryId||'')!==next;s.categoryId=next;}
         if('newPolicy'in a){if(!['review','auto'].includes(a.newPolicy))fail(400,'新增策略无效');s.newPolicy=a.newPolicy;}
         if('newCategoryId'in a)s.newCategoryId=category(st,a.newCategoryId);
         sourceOptions(s,a);
@@ -254,18 +260,22 @@ async function admin(req,env,url){
       if(typeof a.disabled==='boolean')m.disabled=a.disabled;
       if(a.approve===true)m.pending=false;
       sourceOptions(m,a,true);
-      if('categoryId'in a)m.categoryId=category(st,a.categoryId);
+      if('categoryId'in a){const next=category(st,a.categoryId);allowCategoryRemoval=(m.categoryId||'')!==next;m.categoryId=next;}
       if(m.removed&&!m.paused)s.modules=s.modules.filter(x=>x!==m);
       s.edit=uid();
     }else if(path==='/api/category'){
       const c=a.id?by(st.categories,a.id,'分类'):null;
       if(a.delete===true){
         if(!c)fail(400,'需要分类 ID');st.categories=st.categories.filter(x=>x!==c);
-        for(const s of st.sources){if(s.categoryId===c.id)s.categoryId='';if(s.newCategoryId===c.id)s.newCategoryId='';for(const m of [...s.modules,...(s.moduleOverrides||[])])if(m.categoryId===c.id)m.categoryId='';s.edit=uid();}
+        for(const s of st.sources){if(s.categoryId===c.id)s.categoryId='';if(s.newCategoryId===c.id)s.newCategoryId='';for(const m of [...s.modules,...(s.moduleOverrides||[])]){if(m.categoryId===c.id)m.categoryId='';if(m.autoCategoryFallbackId===c.id)delete m.autoCategoryFallbackId;}s.edit=uid();}
+        allowCategoryRemoval=true;
       }else{
-        const name=text(a.name,60,'分类名',true);
+        const name=Object.hasOwn(a,'name')||!c?text(a.name,60,'分类名',true):c.name;
         if(st.categories.some(x=>x!==c&&x.name===name))fail(409,'已有同名分类');
-        if(c)c.name=name;else{if(st.categories.length>=80)fail(409,'已达到分类上限');st.categories.push({id:uid(),name});}
+        const oldRule=normalizeAutoRule(c?.autoRule);
+        const autoRule=Object.hasOwn(a,'autoRule')?normalizeAutoRule(a.autoRule):oldRule;
+        allowCategoryRemoval=JSON.stringify(oldRule)!==JSON.stringify(autoRule);
+        if(c)Object.assign(c,{name,autoRule});else{if(st.categories.length>=80)fail(409,'已达到分类上限');st.categories.push({id:uid(),name,autoRule});}
       }
     }else if(path==='/api/distribution'){
       let d=a.id?by(st.distributions,a.id,'分发'):null;
@@ -282,7 +292,7 @@ async function admin(req,env,url){
     }else if(path==='/api/publish'){
       return publish(st,by(st.distributions,a.id,'分发'),originFor(env,st,origin),a.confirmEmpty);
     }else fail(404,'接口不存在');
-    if(path==='/api/module/update'||path==='/api/source/update'||path==='/api/category')republish(st,originFor(env,st,origin));
+    if(path==='/api/module/update'||path==='/api/source/update'||path==='/api/category')republish(st,originFor(env,st,origin),{allowRemoval:allowCategoryRemoval});
     return {ok:true};
   }));
 }

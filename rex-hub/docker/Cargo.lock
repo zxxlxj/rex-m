@@ -966,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "rex-hub"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "axum",
  "chrono",

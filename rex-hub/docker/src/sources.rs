@@ -736,6 +736,7 @@ fn js_meta(bytes: &[u8], base: Option<&Url>, fallback: &Value) -> R<Value> {
 struct Index {
     rows: Vec<Value>,
     label: String,
+    author: String,
     icon: Value,
 }
 fn index_data(bytes: &[u8]) -> R<Index> {
@@ -751,6 +752,9 @@ fn index_data(bytes: &[u8]) -> R<Index> {
     Ok(Index {
         rows: rows.clone(),
         label: text(pick(&value, &["title", "name"]), 160, "合集标题", false)?.into(),
+        author: text(&value["author"], 120, "合集作者", false)
+            .unwrap_or_default()
+            .into(),
         icon: first(&value, &["icon", "logo", "iconURL"]).clone(),
     })
 }
@@ -778,6 +782,7 @@ fn unique(modules: &[Value]) -> R<()> {
 struct Parsed {
     modules: Vec<Value>,
     label: String,
+    author: String,
     icon: String,
     kind: &'static str,
 }
@@ -799,15 +804,21 @@ fn parse_online(bytes: &[u8], source: &Url, effective: &Url, manual: &Value) -> 
         Ok(Parsed {
             modules,
             label: index.label,
+            author: index.author,
             icon: source_icon(&index.icon, Some(effective)),
             kind: "online-index",
         })
     } else {
         let meta = js_meta(bytes, Some(effective), manual)?;
-        let (label, icon) = (s(&meta, "title").into(), s(&meta, "icon").into());
+        let (label, icon, author) = (
+            s(&meta, "title").into(),
+            s(&meta, "icon").into(),
+            s(&meta, "author").into(),
+        );
         Ok(Parsed {
             modules: vec![module(meta, effective.as_str())],
             label,
+            author,
             icon,
             kind: "online-module",
         })
@@ -945,7 +956,7 @@ async fn parse_upload(app: &App, input: &Value, origin: &str) -> R<Parsed> {
         local_origin(origin, true)?
     };
     let (mut stored, mut used, mut modules) = (BTreeMap::new(), HashSet::new(), vec![]);
-    let (label, mut icon, kind) = if let Some((name, payload)) = index {
+    let (label, author, mut icon, kind) = if let Some((name, payload)) = index {
         let index = index_data(payload.as_bytes())?;
         for row in index.rows {
             let spec = row_url(&row)?;
@@ -985,6 +996,7 @@ async fn parse_upload(app: &App, input: &Value, origin: &str) -> R<Parsed> {
             } else {
                 index.label
             },
+            index.author,
             source_icon(&index.icon, base),
             "upload-index",
         )
@@ -1006,6 +1018,11 @@ async fn parse_upload(app: &App, input: &Value, origin: &str) -> R<Parsed> {
             } else {
                 js[0].0.into()
             },
+            if modules.len() == 1 {
+                s(&modules[0], "author").into()
+            } else {
+                String::new()
+            },
             String::new(),
             "upload-modules",
         )
@@ -1022,6 +1039,7 @@ async fn parse_upload(app: &App, input: &Value, origin: &str) -> R<Parsed> {
     Ok(Parsed {
         modules,
         label,
+        author,
         icon,
         kind,
     })
@@ -1333,6 +1351,7 @@ async fn ingest_inner(app: &App, input: &Value, origin: &str) -> R<Value> {
     source["modules"] = Value::Array(std::mem::take(&mut parsed.modules));
     source["kind"] = json!(parsed.kind);
     source["label"] = json!(parsed.label);
+    source["author"] = json!(parsed.author);
     source["icon"] = json!(parsed.icon);
     source["checkedAt"] = json!(stamp());
     if s(&source, "delivery") == "mirror" && s(input, "replaceId").is_empty() {
@@ -1341,10 +1360,11 @@ async fn ingest_inner(app: &App, input: &Value, origin: &str) -> R<Value> {
     Ok(source)
 }
 const RETAIN_MS: i64 = 30 * 24 * 60 * 60 * 1000;
-const OVERRIDES: [&str; 6] = [
+const OVERRIDES: [&str; 7] = [
     "paused",
     "disabled",
     "categoryId",
+    "autoCategoryFallbackId",
     "pending",
     "delivery",
     "refreshMinutes",
@@ -1382,13 +1402,14 @@ fn reconcile(source: &Value, incoming: Vec<Value>) -> R<(Vec<Value>, Vec<Value>)
             }
         } else {
             m["pending"] = json!(s(source, "newPolicy") != "auto");
-            m["categoryId"] = json!(s(source, "newCategoryId"));
             if let Some(saved) = saved {
                 for k in OVERRIDES {
                     if let Some(v) = saved.get(k) {
                         m[k] = v.clone();
                     }
                 }
+            } else {
+                m["autoCategoryFallbackId"] = json!(s(source, "newCategoryId"));
             }
         }
         out.push(m);
@@ -1400,6 +1421,7 @@ fn reconcile(source: &Value, incoming: Vec<Value>) -> R<(Vec<Value>, Vec<Value>)
             out.push(kept);
         } else if yes(m, "disabled")
             || !s(m, "categoryId").is_empty()
+            || !s(m, "autoCategoryFallbackId").is_empty()
             || has(m, "pending")
             || has(m, "delivery")
             || has(m, "refreshMinutes")
@@ -1450,7 +1472,7 @@ async fn refresh_inner(
         let payload = download(
             app,
             u.clone(),
-            if source["contentMetadataVersion"] == 1 {
+            if source["contentMetadataVersion"] == 1 && source["author"].is_string() {
                 source
             } else {
                 &Value::Null
@@ -1467,6 +1489,12 @@ async fn refresh_inner(
             }
             let (modules, tombs) = reconcile(source, parsed.modules)?;
             out["kind"] = json!(parsed.kind);
+            out["label"] = json!(if parsed.label.is_empty() {
+                u.host_str().unwrap_or("")
+            } else {
+                &parsed.label
+            });
+            out["author"] = json!(parsed.author);
             out["icon"] = json!(parsed.icon);
             out["modules"] = json!(modules);
             out["moduleOverrides"] = json!(tombs);
@@ -1504,7 +1532,7 @@ mod tests {
     use super::*;
 
     const ORIGIN: &str = "https://hub.example.com";
-    const WIDGET: &str = "\u{feff}/* Rex */\n'use strict';\nconst WidgetMetadata = {id:'org.rex.fixture',title:'示例 \\uD83D\\uDC4B',version:'2.1',requiredVersion:'0.0.6',modules:[{id:'list', parameters:[{value:null, n:-.2e+2,},],},],};\n";
+    const WIDGET: &str = "\u{feff}/* Rex */\n'use strict';\nconst WidgetMetadata = {id:'org.rex.fixture',title:'示例 \\uD83D\\uDC4B',author:'JS author',version:'2.1',requiredVersion:'0.0.6',modules:[{id:'list', parameters:[{value:null, n:-.2e+2,},],},],};\n";
 
     fn test_app() -> App {
         App {
@@ -1530,7 +1558,7 @@ mod tests {
         let root = source_url("https://rexnow.tv/widget?url=https%3A%2F%2Fraw.githubusercontent.com%2Frex%2Fmain%2Flist.rex").unwrap();
         let row = json!({"id":"org.rex.fixture","title":"清单示例","version":"1.0","requiredVersion":"0.0.6","url":"./fixture.rex.js","icon":"./icons/sample.png"});
         let index = parse_online(
-            json!({"title":"测试合集","widgets":[row]})
+            json!({"title":"测试合集","author":"Index author","widgets":[row]})
                 .to_string()
                 .as_bytes(),
             &root,
@@ -1539,6 +1567,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(index.label, "测试合集");
+        assert_eq!(index.author, "Index author");
+        let js = Url::parse("https://cdn.example.com/fixture.js").unwrap();
+        assert_eq!(
+            parse_online(WIDGET.as_bytes(), &js, &js, &Value::Null)
+                .unwrap()
+                .author,
+            "JS author"
+        );
         assert_eq!(
             index.modules[0]["url"],
             "https://raw.githubusercontent.com/rex/main/fixture.rex.js"
@@ -1627,7 +1663,8 @@ mod tests {
         assert_eq!(modules[0]["delivery"], "link");
         assert_eq!(modules[0]["refreshMinutes"], 5);
         assert_eq!(modules[1]["pending"], true);
-        assert_eq!(modules[1]["categoryId"], "inbox");
+        assert!(s(&modules[1], "categoryId").is_empty());
+        assert_eq!(modules[1]["autoCategoryFallbackId"], "inbox");
         assert_eq!(modules[2]["title"], "旧标题");
         assert_eq!(modules[2]["removed"], true);
         let source = json!({"newPolicy":"auto","modules":modules,"moduleOverrides":overrides});

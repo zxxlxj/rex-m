@@ -1,6 +1,6 @@
 # Rex Hub · 模块聚合与分发
 
-**当前版本：`0.0.5`**
+**当前版本：`0.0.6`**
 
 可选 **[Docker 自托管](./DOCKER.md)** 或 **[Cloudflare Worker](#一键部署到-cloudflare)**。下面的免费额度提示只适用于 Cloudflare 版。
 
@@ -14,7 +14,7 @@
 公开镜像，无需登录 GHCR，支持 `linux/amd64` 和 `linux/arm64`：
 
 ```bash
-docker pull ghcr.io/zxxlxj/rex-hub:0.0.5
+docker pull ghcr.io/zxxlxj/rex-hub:0.0.6
 ```
 
 启动命令和 NAS／HTTPS 配置见 [Docker 部署说明](./DOCKER.md)。
@@ -39,6 +39,11 @@ docker pull ghcr.io/zxxlxj/rex-hub:0.0.5
 ## 来源分类与 Rex 内容类型
 
 来源页可切换到「分类」，点「全部」「未分类」或其他分类小标签，并结合模块声明和关键词筛选，可多选或全选筛选结果，一次调整分类，也可在这里新增、重命名或删除分类。Hub 保留 [Rex 官方声明](https://modules.rexnow.app/guide/#content-type) `video`、`music`、`audiobook`、`shortDrama` 和可选的 `continuousPlay`，不改写上游脚本或最低引擎版本。未声明类型的模块保持未指定；仅旧清单直链且没有提供类型时，Hub 不猜测脚本内容。依赖这些类型的模块需要 Rex 0.0.7 脚本引擎支持。
+
+
+### 自动分类
+
+在「来源 → 分类 → 管理分类」展开某个分类，开启自动分类并保存规则。可多选 Rex 声明类型，也可填写模块名称、模块作者、来源名称和来源作者。不同字段同时满足才算命中；同一字段内用逗号分隔的关键词满足任意一个即可，不区分大小写。启用后立即重算原有和新增模块。手动指定的分类优先，其次取列表里第一个命中的自动分类，最后才沿用新增模块的默认分类或来源默认分类。清除模块的手动分类可恢复自动匹配。
 
 ## 徽章包
 

@@ -172,25 +172,205 @@ fn delivered<'a>(s: &'a Value, m: &'a Value, st: &'a Value) -> &'a str {
             .unwrap_or(text(&st["settings"]["defaultDelivery"])),
     }
 }
+fn uses_mirror(st: &Value, s: &Value, m: &Value, origin: &str) -> bool {
+    delivered(s, m, st) == "mirror"
+        && file_key(&m["url"], origin).is_none()
+        && !text(&m["url"]).starts_with(&format!("{origin}/m/"))
+}
+fn delivery_metadata(m: &Value, mirror: bool) -> &Value {
+    if mirror && m["mirror"]["contentMetadataVersion"] == 1 {
+        &m["mirror"]
+    } else {
+        m
+    }
+}
+const RULE_FIELDS: [&str; 4] = ["moduleName", "moduleAuthor", "sourceName", "sourceAuthor"];
+fn valid_content_type(t: &str) -> bool {
+    matches!(
+        t,
+        "video" | "music" | "audiobook" | "shortDrama" | "unspecified"
+    )
+}
+fn normalize_rule(v: &Value) -> Value {
+    let mut types = Vec::new();
+    for t in arr(&v["contentTypes"]).iter().map(|x| text(x).trim()) {
+        if valid_content_type(t) && !types.contains(&t) {
+            types.push(t);
+        }
+    }
+    let mut rule = json!({"enabled":on(&v["enabled"]), "contentTypes":types});
+    for field in RULE_FIELDS {
+        rule[field] = json!(text(&v[field]).trim());
+    }
+    rule
+}
+struct CategoryRule<'a> {
+    id: &'a str,
+    types: &'a [Value],
+    terms: [Vec<String>; 4],
+}
+fn category_rules(categories: &[Value]) -> Vec<CategoryRule<'_>> {
+    categories
+        .iter()
+        .filter_map(|c| {
+            let rule = &c["autoRule"];
+            let id = text(&c["id"]);
+            if id.is_empty() || !on(&rule["enabled"]) {
+                return None;
+            }
+            let types = arr(&rule["contentTypes"]);
+            let terms = RULE_FIELDS.map(|field| {
+                text(&rule[field])
+                    .split([',', '，', '\r', '\n'])
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_lowercase)
+                    .collect::<Vec<_>>()
+            });
+            (!types.is_empty() || terms.iter().any(|t| !t.is_empty())).then_some(CategoryRule {
+                id,
+                types,
+                terms,
+            })
+        })
+        .collect()
+}
+#[derive(Default)]
+struct CategorySource {
+    label: String,
+    authors: HashSet<String>,
+}
+impl CategorySource {
+    fn new(s: &Value) -> Self {
+        let author = text(&s["author"]).trim();
+        let authors = if author.is_empty() {
+            arr(&s["modules"])
+                .iter()
+                .filter(|m| !on(&m["removed"]))
+                .map(|m| text(&m["author"]).trim())
+                .filter(|a| !a.is_empty())
+                .map(str::to_lowercase)
+                .collect()
+        } else {
+            HashSet::from([author.to_lowercase()])
+        };
+        Self {
+            label: text(&s["label"]).to_lowercase(),
+            authors,
+        }
+    }
+}
+fn effective_category<'a>(
+    rules: &[CategoryRule<'a>],
+    context: &CategorySource,
+    s: &'a Value,
+    m: &'a Value,
+    mirror: bool,
+) -> &'a str {
+    let explicit = text(&m["categoryId"]);
+    let arrival_fallback = text(&m["autoCategoryFallbackId"]);
+    let fallback = if arrival_fallback.is_empty() {
+        text(&s["categoryId"])
+    } else {
+        arrival_fallback
+    };
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    if rules.is_empty() {
+        return fallback;
+    }
+    let kind = text(&delivery_metadata(m, mirror)["contentType"]);
+    let kind = if valid_content_type(kind) {
+        kind
+    } else {
+        "unspecified"
+    };
+    let fields = [
+        text(&m["title"]).to_lowercase(),
+        text(&m["author"]).to_lowercase(),
+    ];
+    rules
+        .iter()
+        .find(|r| {
+            (r.types.is_empty() || r.types.iter().any(|t| t == kind))
+                && r.terms.iter().enumerate().all(|(i, terms)| {
+                    terms.is_empty()
+                        || terms.iter().any(|term| match i {
+                            0 | 1 => fields[i].contains(term),
+                            2 => context.label.contains(term),
+                            _ => context.authors.iter().any(|author| author.contains(term)),
+                        })
+                })
+        })
+        .map_or(fallback, |r| r.id)
+}
+fn attach_categories(st: &mut Value, origin: &str) {
+    let mut categories = st["categories"].clone();
+    for c in categories.as_array_mut().unwrap() {
+        c["autoRule"] = normalize_rule(&c["autoRule"]);
+    }
+    let rules = category_rules(arr(&categories));
+    let ids = arr(&st["sources"])
+        .iter()
+        .map(|s| {
+            let context = if rules.is_empty() {
+                CategorySource::default()
+            } else {
+                CategorySource::new(s)
+            };
+            arr(&s["modules"])
+                .iter()
+                .map(|m| {
+                    effective_category(&rules, &context, s, m, uses_mirror(st, s, m, origin))
+                        .to_owned()
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for (s, ids) in st["sources"].as_array_mut().unwrap().iter_mut().zip(ids) {
+        if let Some(modules) = s["modules"].as_array_mut() {
+            for (m, id) in modules.iter_mut().zip(ids) {
+                m["effectiveCategoryId"] = json!(id);
+            }
+        }
+    }
+    st["categories"] = categories;
+}
 fn build(st: &Value, d: &Value, origin: &str) -> Value {
+    let rules = if d["mode"] == "rules" && !arr(&d["categoryIds"]).is_empty() {
+        category_rules(arr(&st["categories"]))
+    } else {
+        Vec::new()
+    };
     let mut chosen: BTreeMap<String, Vec<(i32, &Value, &Value, String)>> = BTreeMap::new();
     let mut order = Vec::new();
     for s in arr(&st["sources"]) {
+        let context = if rules.is_empty() {
+            CategorySource::default()
+        } else {
+            CategorySource::new(s)
+        };
         for m in arr(&s["modules"]) {
             let id = text(&m["id"]);
             let r = format!("{}:{id}", text(&s["id"]));
-            let cat = m["categoryId"]
-                .as_str()
-                .filter(|x| !x.is_empty())
-                .unwrap_or(text(&s["categoryId"]));
             let explicit = includes(&d["include"], &r);
-            if on(&m["disabled"])
-                || on(&m["pending"])
-                || includes(&d["exclude"], &r)
-                || !(explicit
-                    || d["mode"] == "rules"
-                        && (includes(&d["sourceIds"], text(&s["id"]))
-                            || (!cat.is_empty() && includes(&d["categoryIds"], cat))))
+            if on(&m["disabled"]) || on(&m["pending"]) || includes(&d["exclude"], &r) {
+                continue;
+            }
+            if !explicit
+                && !(d["mode"] == "rules"
+                    && (includes(&d["sourceIds"], text(&s["id"]))
+                        || (!arr(&d["categoryIds"]).is_empty() && {
+                            let cat = effective_category(
+                                &rules,
+                                &context,
+                                s,
+                                m,
+                                uses_mirror(st, s, m, origin),
+                            );
+                            !cat.is_empty() && includes(&d["categoryIds"], cat)
+                        })))
             {
                 continue;
             }
@@ -220,9 +400,7 @@ fn build(st: &Value, d: &Value, origin: &str) -> Value {
             }
             conflicts.push(json!({"id":id,"first":r,"second":a[1].3,"resolved":!tied}));
         }
-        let mirror = delivered(s, m, st) == "mirror"
-            && file_key(&m["url"], origin).is_none()
-            && !text(&m["url"]).starts_with(&format!("{origin}/m/"));
+        let mirror = uses_mirror(st, s, m, origin);
         let snap = &m["mirror"];
         let stored = file_key(&snap["url"], origin);
         let url = if mirror {
@@ -251,13 +429,9 @@ fn build(st: &Value, d: &Value, origin: &str) -> Value {
         widget
             .as_object_mut()
             .unwrap()
-            .extend(crate::sources::content_metadata(
-                if mirror && snap["contentMetadataVersion"] == 1 {
-                    snap
-                } else {
-                    m
-                },
-            ));
+            .extend(crate::sources::content_metadata(delivery_metadata(
+                m, mirror,
+            )));
         widgets.push(widget);
     }
     if d["order"] != "source" {
@@ -693,6 +867,7 @@ pub async fn api(
     if method == Method::GET {
         let mut st = get(app)?;
         if path == "/api/state" {
+            attach_categories(&mut st, &app.origin);
             st["origin"] = json!(app.origin);
             return Ok(json(st));
         }
@@ -814,6 +989,7 @@ pub async fn api(
                 } else if let Some(i) = i {
                     for k in [
                         "categoryId",
+                        "autoCategoryFallbackId",
                         "disabled",
                         "delivery",
                         "refreshMinutes",
@@ -875,6 +1051,7 @@ pub async fn api(
                 .map(|v| category(st, v))
                 .transpose()?;
             let s = &mut st["sources"][i];
+            let category_changed = cat.as_deref().is_some_and(|x| x != text(&s["categoryId"]));
             if let Some(x) = cat {
                 s["categoryId"] = json!(x);
             }
@@ -892,7 +1069,7 @@ pub async fn api(
             }
             options(s, a, false)?;
             s["edit"] = json!(id());
-            republish(st, &app.origin, false);
+            republish(st, &app.origin, category_changed);
         } else if path == "/api/module/batch-category" {
             let cat = category(st, &a["categoryId"])?;
             let rows = a["modules"]
@@ -922,6 +1099,8 @@ pub async fn api(
             let s = &mut st["sources"][i];
             track(s, &Value::Null, &app.origin);
             let m = &mut s["modules"][j];
+            let category_changed = cat.as_deref().is_some_and(|x| x != text(&m["categoryId"]));
+            let approving = on(&a["approve"]) && on(&m["pending"]);
             if let Some(x) = cat {
                 m["categoryId"] = json!(x);
             }
@@ -938,13 +1117,14 @@ pub async fn api(
                 s["modules"].as_array_mut().unwrap().remove(j);
             }
             s["edit"] = json!(id());
-            republish(st, &app.origin, false);
+            republish(st, &app.origin, category_changed || approving);
         } else if path == "/api/category" {
             let i = if idv.is_empty() {
                 None
             } else {
                 Some(index(&st["categories"], &idv)?)
             };
+            let mut rule_changed = false;
             if on(&a["delete"]) {
                 st["categories"]
                     .as_array_mut()
@@ -959,8 +1139,10 @@ pub async fn api(
                     for k in ["modules", "moduleOverrides"] {
                         if let Some(ms) = s[k].as_array_mut() {
                             for m in ms {
-                                if m["categoryId"] == idv {
-                                    m["categoryId"] = json!("");
+                                for field in ["categoryId", "autoCategoryFallbackId"] {
+                                    if m[field] == idv {
+                                        m[field] = json!("");
+                                    }
                                 }
                             }
                         }
@@ -968,7 +1150,12 @@ pub async fn api(
                     s["edit"] = json!(id());
                 }
             } else {
-                let name = bounded(&a["name"], 60)?;
+                let existing = i.map(|i| &st["categories"][i]);
+                let name = if let Some(name) = a.get("name") {
+                    bounded(name, 60)?
+                } else {
+                    existing.map_or("", |c| text(&c["name"])).to_owned()
+                };
                 if name.is_empty() {
                     return Err(err(400, "分类名不能为空"));
                 }
@@ -979,16 +1166,22 @@ pub async fn api(
                 {
                     return Err(err(409, "已有同名分类"));
                 }
+                let old_rule = normalize_rule(existing.map_or(&Value::Null, |c| &c["autoRule"]));
+                let rule = a
+                    .get("autoRule")
+                    .map_or_else(|| old_rule.clone(), normalize_rule);
+                rule_changed = rule != old_rule;
                 if let Some(i) = i {
                     st["categories"][i]["name"] = json!(name);
+                    st["categories"][i]["autoRule"] = rule;
                 } else {
                     st["categories"]
                         .as_array_mut()
                         .unwrap()
-                        .push(json!({"id":id(),"name":name}));
+                        .push(json!({"id":id(),"name":name,"autoRule":rule}));
                 }
             }
-            republish(st, &app.origin, false);
+            republish(st, &app.origin, rule_changed);
         } else if path == "/api/distribution" || path == "/api/publish" {
             let i = if idv.is_empty() {
                 None
@@ -1086,4 +1279,86 @@ pub async fn api(
         *r.status_mut() = StatusCode::CONFLICT;
     }
     Ok(r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ORIGIN: &str = "https://hub.example.com";
+
+    #[test]
+    fn classification_resolves_rules_in_management_order() {
+        let mut st = defaults();
+        st["categories"] = json!([
+            {"id":"disabled","autoRule":{"enabled":false,"moduleName":"opera"}},
+            {"id":"empty","autoRule":{"enabled":true,"moduleName":" ,，\n "}},
+            {"id":"first","autoRule":{"enabled":true,"contentTypes":["video","music"],"moduleName":"no match， OPERA\nThird","moduleAuthor":"alice","sourceName":"ARCHIVE","sourceAuthor":"boB"}},
+            {"id":"second","autoRule":{"enabled":true,"contentTypes":["music"]}},
+            {"id":"unknown","autoRule":{"enabled":true,"contentTypes":["unspecified"]}},
+            {"id":"legacy"}
+        ]);
+        st["sources"] = json!([{"id":"s","label":"Classics Archive","categoryId":"source","modules":[
+            {"id":"explicit","title":"An Opera","author":"Alice","contentType":"music","categoryId":"manual","autoCategoryFallbackId":"arrival"},
+            {"id":"matching","title":"An Opera","author":"Alice","contentType":"music","autoCategoryFallbackId":"arrival"},
+            {"id":"second","title":"Other","author":"Alice","contentType":"music","autoCategoryFallbackId":"arrival"},
+            {"id":"fallback","title":"Other","author":"Bob","contentType":"audiobook","autoCategoryFallbackId":"arrival"},
+            {"id":"source","title":"Other","contentType":"shortDrama"},
+            {"id":"unknown","title":"Other"}
+        ]}]);
+        let distribution = json!({"key":"collection","mode":"rules","categoryIds":["first"]});
+        assert_eq!(
+            build(&st, &distribution, ORIGIN)["manifest"]["widgets"][0]["id"],
+            "matching"
+        );
+        let mut response = st.clone();
+        attach_categories(&mut response, ORIGIN);
+        assert_eq!(
+            response["categories"][5]["autoRule"],
+            normalize_rule(&Value::Null)
+        );
+        let modules = arr(&response["sources"][0]["modules"]);
+        assert_eq!(
+            modules
+                .iter()
+                .map(|m| text(&m["effectiveCategoryId"]))
+                .collect::<Vec<_>>(),
+            ["manual", "first", "second", "arrival", "source", "unknown"]
+        );
+        assert!(st["sources"][0]["modules"][1]
+            .get("effectiveCategoryId")
+            .is_none());
+        st["sources"][0]["author"] = json!("Editor");
+        attach_categories(&mut st, ORIGIN);
+        assert_eq!(
+            st["sources"][0]["modules"][1]["effectiveCategoryId"],
+            "second"
+        );
+    }
+
+    #[test]
+    fn classification_uses_the_published_mirror_type_and_preserves_background_removal_guard() {
+        let mut st = defaults();
+        st["categories"] = json!([{"id":"auto","autoRule":normalize_rule(&json!({"enabled":true,"contentTypes":["music","invalid"," music "]}))}]);
+        assert_eq!(
+            st["categories"][0]["autoRule"]["contentTypes"],
+            json!(["music"])
+        );
+        st["sources"] = json!([{"id":"s","delivery":"mirror","modules":[{"id":"m","title":"Module","url":"https://example.com/m.js","contentType":"video","mirror":{"url":format!("{ORIGIN}/files/{}.js", "a".repeat(64)),"contentMetadataVersion":1,"contentType":"music"}}]}]);
+        let mut d = json!({"key":"collection","title":"Collection","mode":"rules","categoryIds":["auto"],"enabled":true});
+        let next = build(&st, &d, ORIGIN);
+        assert_eq!(next["manifest"]["widgets"][0]["contentType"], "music");
+        assert!(publish(&mut d, next, false).unwrap());
+        st["distributions"] = json!([d]);
+        st["sources"][0]["modules"][0]["mirror"]["contentType"] = json!("video");
+        republish(&mut st, ORIGIN, false);
+        assert_eq!(st["distributions"][0]["publishWarning"], "异常批量移除");
+        assert_eq!(
+            arr(&st["distributions"][0]["published"]["widgets"]).len(),
+            1
+        );
+        republish(&mut st, ORIGIN, true);
+        assert_eq!(st["distributions"][0]["publishWarning"], "");
+        assert_eq!(st["distributions"][0]["published"]["widgets"], json!([]));
+    }
 }

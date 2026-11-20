@@ -26,8 +26,10 @@ assert request('/api/session')['authenticated']
 request('/api/category', {'name': '测试'})
 cat = request('/api/state')['categories'][0]['id']
 request('/api/distribution', {'key': 'test-hub', 'title': 'Smoke', 'mode': 'rules', 'categoryIds': [cat], 'enabled': True, 'publish': True, 'confirmEmpty': True})
-module = 'var WidgetMetadata = {id:"rex.smoke",title:"Smoke",version:"1.0.0",requiredVersion:"0.0.7",contentType:"music",continuousPlay:false,modules:[]};'
+module = 'var WidgetMetadata = {id:"rex.smoke",title:"Smoke",author:"Example Author",version:"1.0.0",requiredVersion:"0.0.7",contentType:"music",continuousPlay:false,modules:[]};'
 src = request('/api/source', {'categoryId': cat, 'files': [{'name': 'smoke.js', 'text': module}]}, status=201)['source']
+assert src['author'] == 'Example Author'
+assert 'effectiveCategoryId' not in src['modules'][0]
 manifest = request('/s/test-hub.rex')
 assert manifest['widgets'][0]['id'] == 'rex.smoke'
 assert manifest['widgets'][0]['contentType'] == 'music' and manifest['widgets'][0]['continuousPlay'] is False
@@ -39,6 +41,25 @@ refs = [{'sourceId': src['id'], 'id': 'rex.smoke'}]
 assert request('/api/module/batch-category', {'modules': refs, 'categoryId': new_cat})['count'] == 1
 assert request('/s/test-hub.rex')['widgets'] == []
 request('/api/module/batch-category', {'modules': refs, 'categoryId': ''})
+assert len(request('/s/test-hub.rex')['widgets']) == 1
+rule = {'enabled': True, 'contentTypes': ['music', ' music ', 'other'], 'moduleName': ' SMOKE，other ', 'sourceAuthor': 'EXAMPLE'}
+request('/api/category', {'id': new_cat, 'autoRule': rule})
+state = request('/api/state')
+assert state['categories'][1]['autoRule'] == {'enabled': True, 'contentTypes': ['music'], 'moduleName': 'SMOKE，other', 'moduleAuthor': '', 'sourceName': '', 'sourceAuthor': 'EXAMPLE'}
+assert state['sources'][0]['modules'][0]['effectiveCategoryId'] == new_cat
+assert request('/s/test-hub.rex')['widgets'] == []
+request('/api/module/update', {'sourceId': src['id'], 'id': 'rex.smoke', 'categoryId': cat})
+assert request('/api/state')['sources'][0]['modules'][0]['effectiveCategoryId'] == cat
+assert len(request('/s/test-hub.rex')['widgets']) == 1
+request('/api/module/update', {'sourceId': src['id'], 'id': 'rex.smoke', 'categoryId': ''})
+assert request('/api/state')['sources'][0]['modules'][0]['effectiveCategoryId'] == new_cat
+assert request('/s/test-hub.rex')['widgets'] == []
+request('/api/category', {'id': new_cat, 'autoRule': {'enabled': False}})
+assert request('/api/state')['sources'][0]['modules'][0]['effectiveCategoryId'] == cat
+assert len(request('/s/test-hub.rex')['widgets']) == 1
+request('/api/source/update', {'id': src['id'], 'categoryId': new_cat})
+assert request('/s/test-hub.rex')['widgets'] == []
+request('/api/source/update', {'id': src['id'], 'categoryId': cat})
 assert len(request('/s/test-hub.rex')['widgets']) == 1
 request('/api/source/batch', {'ids': [src['id']], 'action': 'delete'})
 assert request('/s/test-hub.rex')['widgets'] == []

@@ -1,4 +1,4 @@
-import { contentMetadata } from './sources.mjs';
+import { CONTENT_TYPES, contentMetadata } from './sources.mjs';
 export const MAX_SOURCES = 20, MAX_ITEMS = 160, MAX_DISTS = 20;
 export class Problem extends Error { constructor(status,message){super(message);this.status=status;} }
 export function fail(status,message){throw new Problem(status,message);}
@@ -11,17 +11,56 @@ export function applyNewPolicy(source,modules){
   const previous=new Map(source.modules.map(m=>[m.id,m]));
   return modules.map(m=>{
     const old=previous.get(m.id);
-    if(old)return {...m,pending:!!old.pending,categoryId:old.categoryId||'',delivery:old.delivery,refreshMinutes:old.refreshMinutes,mirror:old.mirror};
-    return {...m,pending:source.newPolicy!=='auto',categoryId:m.categoryId||source.newCategoryId||''};
+    if(old)return {...m,pending:!!old.pending,categoryId:old.categoryId||'',...(old.autoCategoryFallbackId&&{autoCategoryFallbackId:old.autoCategoryFallbackId}),delivery:old.delivery,refreshMinutes:old.refreshMinutes,mirror:old.mirror};
+    const fallback=m.autoCategoryFallbackId??source.newCategoryId;
+    return {...m,pending:source.newPolicy!=='auto',categoryId:m.categoryId||'',...(fallback&&{autoCategoryFallbackId:fallback})};
   });
 }
+const RULE_FIELDS=['moduleName','moduleAuthor','sourceName','sourceAuthor'];
+const string=v=>typeof v==='string'?v:'';
 const has=(xs,x)=>xs.includes(x);
+const isRuleType=type=>type==='unspecified'||has(CONTENT_TYPES,type);
+export function normalizeAutoRule(input){
+  const types=Array.isArray(input?.contentTypes)?input.contentTypes:[];
+  return {enabled:input?.enabled===true,contentTypes:[...new Set(types.map(x=>string(x).trim()).filter(isRuleType))],
+    ...Object.fromEntries(RULE_FIELDS.map(field=>[field,string(input?.[field]).trim()]))};
+}
+const terms=value=>value.split(/[,，\r\n]/).map(x=>x.trim().toLowerCase()).filter(Boolean);
+function usesMirror(state,s,m,origin){
+  return deliveryMode(s,m,state.settings?.defaultDelivery)==='mirror' && !m.url?.startsWith(`${origin}/files/`) && !m.url?.startsWith(`${origin}/m/`);
+}
+const deliveryMetadata=(m,file)=>file?.contentMetadataVersion===1?file:m;
+export function categoryResolver(state,origin=state.origin||''){
+  const rules=(state.categories||[]).flatMap(c=>{
+    const rule=normalizeAutoRule(c.autoRule);
+    if(!c.id||!rule.enabled)return [];
+    const filters=RULE_FIELDS.map(field=>terms(rule[field]));
+    return rule.contentTypes.length||filters.some(xs=>xs.length)?[{id:c.id,types:rule.contentTypes,filters}]:[];
+  });
+  const contexts=new WeakMap();
+  return (s,m)=>{
+    if(m.categoryId)return m.categoryId;
+    const fallback=m.autoCategoryFallbackId||s.categoryId||'';
+    if(!rules.length)return fallback;
+    if(!contexts.has(s)){
+      const explicit=string(s.author).trim();
+      const authors=explicit?[explicit]:(s.modules||[]).filter(x=>!x.removed).map(x=>string(x.author).trim()).filter(Boolean);
+      contexts.set(s,{label:string(s.label).toLowerCase(),authors:[...new Set(authors.map(x=>x.toLowerCase()))]});
+    }
+    const {label,authors}=contexts.get(s);
+    const type=contentMetadata(deliveryMetadata(m,usesMirror(state,s,m,origin)?m.mirror:null)).contentType||'unspecified';
+    const values=[[string(m.title).toLowerCase()],[string(m.author).toLowerCase()],[label],authors];
+    return rules.find(({types,filters})=>(!types.length||has(types,type))&&filters.every((xs,i)=>!xs.length||xs.some(x=>values[i].some(value=>value.includes(x)))))?.id||fallback;
+  };
+}
+export function effectiveCategory(state,s,m){return categoryResolver(state)(s,m);}
 export function build(state,d,origin){
   const icon=d.icon||`${origin}/rex-mark.png`;
   const selected=new Map(); const conflicts=[]; const unresolved=new Set();
+  const classify=d.mode==='rules'&&d.categoryIds.length?categoryResolver(state,origin):null;
   for(const s of state.sources) for(const m of s.modules){
     const r=ref(s,m);
-    if(m.disabled||m.pending||has(d.exclude,r)||!(has(d.include,r)||(d.mode==='rules'&&(has(d.sourceIds,s.id)||has(d.categoryIds,m.categoryId||s.categoryId))))) continue;
+    if(m.disabled||m.pending||has(d.exclude,r)||!(has(d.include,r)||(d.mode==='rules'&&(has(d.sourceIds,s.id)||(classify&&has(d.categoryIds,classify(s,m))))))) continue;
     const explicit=has(d.include,r), other=selected.get(m.id);
     if(!other){selected.set(m.id,{m,s,r,explicit});continue;}
     conflicts.push({id:m.id,first:other.r,second:r,sources:[other.s.label,s.label],resolved:explicit!==other.explicit});
@@ -32,12 +71,12 @@ export function build(state,d,origin){
   if(d.order==='title')items.sort((a,b)=>a.m.title.localeCompare(b.m.title,'zh-CN')||a.r.localeCompare(b.r));
   const missingMirrors=[], files=Object.create(null), refs=Object.create(null);
   const widgets=items.map(({m,s})=>{
-    const mirror=deliveryMode(s,m,state.settings?.defaultDelivery)==='mirror' && !m.url.startsWith(`${origin}/files/`) && !m.url.startsWith(`${origin}/m/`);
+    const mirror=usesMirror(state,s,m,origin);
     const file=mirror?m.mirror:null;
     if(mirror&&!file?.url)missingMirrors.push({id:m.id,title:m.title,source:s.label});
     if(file?.url)files[m.id]=file.url;
     refs[m.id]=ref(s,m);
-    return {...contentMetadata(file?.contentMetadataVersion===1?file:m),id:m.id,title:m.title,description:m.description||'',requiredVersion:file?.requiredVersion||m.requiredVersion,version:file?.version||m.version,author:m.author||'',icon:m.icon||'',url:mirror?(file?.url?`${origin}/m/${encodeURIComponent(d.key)}/${encodeURIComponent(m.id)}.js`:''):m.url};
+    return {...contentMetadata(deliveryMetadata(m,file)),id:m.id,title:m.title,description:m.description||'',requiredVersion:file?.requiredVersion||m.requiredVersion,version:file?.version||m.version,author:m.author||'',icon:m.icon||'',url:mirror?(file?.url?`${origin}/m/${encodeURIComponent(d.key)}/${encodeURIComponent(m.id)}.js`:''):m.url};
   });
   return {manifest:{name:d.title,title:d.title,description:d.description||'',icon,logo:icon,widgets},files,refs,missingMirrors,conflicts,blocked:[...unresolved]};
 }
