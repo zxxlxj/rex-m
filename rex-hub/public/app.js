@@ -125,7 +125,7 @@ function sourceIcon(s){
   const fallback=`/rex-dino-${String((hash>>>0)%24+1).padStart(2,'0')}.png`;
   const first=(s.modules||[]).find(m=>!m.removed);
   const icon=image([s.icon,first?.icon].find(value=>typeof value==='string'&&value.trim())?.trim());
-  return `<span class="library-glyph" aria-hidden="true"><img src="${E(icon===mark?fallback:icon)}" data-source-icon="${fallback}" alt="" loading="lazy" width="35" height="35"></span>`;
+  return `<span class="library-glyph library-upstream-art" aria-hidden="true"><img src="${fallback}" alt="" decoding="async" width="35" height="35">${icon===mark||icon===fallback?'':`<img class="library-upstream-icon" src="${E(icon)}" data-upstream-icon alt="" decoding="async" referrerpolicy="same-origin" width="35" height="35">`}</span>`;
 }
 function sourceBatchToolbar(){
   return `<div class="library-batch row" id="source-batch" role="group" aria-label="批量操作"${selectingSources?'':' hidden'}><small data-source-selection-count role="status"></small>${btn('全选可见','source-select-visible','disabled')}${btn('清空','source-select-clear','disabled')}${btn('批量检查','source-batch-check','disabled')}${btn('批量删除','source-batch-delete','disabled','danger')}</div>`;
@@ -689,13 +689,9 @@ function clearPublishConfirmation(event){
 }
 dialog.addEventListener('input',clearPublishConfirmation);
 dialog.addEventListener('change',clearPublishConfirmation);
-app.addEventListener('error',event=>{
-  const img=event.target;
-  if(!img.matches?.('img[data-source-icon]'))return;
-  const fallback=img.dataset.sourceIcon, current=img.getAttribute('src');
-  if(current===mark){img.hidden=true;return;}
-  img.src=current===fallback?mark:fallback;
-},true);
+function revealSourceIcon(img){if(img.matches?.('img[data-upstream-icon]')&&img.complete&&img.naturalWidth>0)img.classList.add('is-ready');}
+app.addEventListener('load',event=>revealSourceIcon(event.target),true);
+app.addEventListener('error',event=>{const img=event.target;if(img.matches?.('img[data-upstream-icon]'))navigator.serviceWorker?.controller?.postMessage({type:'bad-upstream-icon',url:img.currentSrc||img.src});},true);
 app.addEventListener('input',event=>{if(event.target.dataset.filter&&!event.isComposing)filterLibrary(event.target);});
 app.addEventListener('compositionend',event=>{if(event.target.dataset.filter)filterLibrary(event.target);});
 app.addEventListener('keydown',event=>{

@@ -1,6 +1,6 @@
 # Rex Hub · 模块聚合与分发
 
-**当前版本：`0.0.8`**
+**当前版本：`0.0.9`**
 
 可选 **[Docker 自托管](./DOCKER.md)** 或 **[Cloudflare Worker](#一键部署到-cloudflare)**。下面的免费额度提示只适用于 Cloudflare 版。
 
@@ -14,7 +14,7 @@
 公开镜像，无需登录 GHCR，支持 `linux/amd64` 和 `linux/arm64`：
 
 ```bash
-docker pull ghcr.io/zxxlxj/rex-hub:0.0.8
+docker pull ghcr.io/zxxlxj/rex-hub:0.0.9
 ```
 
 启动命令和 NAS／HTTPS 配置见 [Docker 部署说明](./DOCKER.md)。
