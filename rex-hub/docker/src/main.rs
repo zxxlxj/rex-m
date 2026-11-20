@@ -373,7 +373,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .dns_resolver(Arc::new(sources::PublicDns))
-        .user_agent("RexHub-Docker/0.0.9")
+        .user_agent("RexHub-Docker/0.0.10")
         .build()?;
     let setup_token = env::var("SETUP_TOKEN_FILE")
         .ok()

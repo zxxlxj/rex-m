@@ -174,7 +174,7 @@ function jsMeta(payload, base, fallback) {
     return moduleMeta(fallback, base);
   }
   let manifest;
-  try { manifest = parseManifestLiteral(payload); } catch { fail('无法静态读取 WidgetMetadata：请将字面量声明置于文件开头', 422); }
+  try { manifest = parseManifestLiteral(payload); } catch { fail('无法静态读取 WidgetMetadata：请确认顶层声明包含可读取的 ID、标题、版本和 modules 数组', 422); }
   if (!object(manifest) || !Array.isArray(manifest.modules)) fail('WidgetMetadata 缺少 modules 数组', 422);
   return moduleMeta(manifest, base, { js: true });
 }

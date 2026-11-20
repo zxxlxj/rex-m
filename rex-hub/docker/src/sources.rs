@@ -409,19 +409,49 @@ static NUMBER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:e[+-]?[0-9]+)?").unwrap());
 static ENCRYPTED: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^[\s\u{feff}]*(?://\s*)?REXENC").unwrap());
-static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bWidgetMetadata\s*=").unwrap());
-
+#[derive(Clone, Copy)]
 struct Literal<'a>(&'a str);
+
+type Bindings<'a> = BTreeMap<&'a str, (Value, bool)>;
+
+fn line_break(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}')
+}
+
+fn ends_expression(token: &str) -> bool {
+    !matches!(
+        token,
+        "return"
+            | "throw"
+            | "case"
+            | "delete"
+            | "void"
+            | "typeof"
+            | "yield"
+            | "await"
+            | "in"
+            | "of"
+            | "instanceof"
+            | "new"
+            | "else"
+            | "do"
+    ) && (token.starts_with(|c: char| {
+        c.is_alphanumeric() || matches!(c, '_' | '$' | '\'' | '"' | '`' | '/' | '(' | '[' | '{')
+    }) && token != "/"
+        || matches!(token, "++" | "--"))
+}
+
 impl<'a> Literal<'a> {
-    fn whitespace(&mut self) -> Option<()> {
+    fn whitespace(&mut self) -> Option<bool> {
+        let start = self.0;
         loop {
             self.0 = self.0.trim_start_matches(ws);
             if let Some(tail) = self.0.strip_prefix("//") {
-                self.0 = tail.find('\n').map_or("", |i| &tail[i..]);
+                self.0 = tail.find(line_break).map_or("", |i| &tail[i..]);
             } else if let Some(tail) = self.0.strip_prefix("/*") {
                 self.0 = &tail[tail.find("*/")? + 2..];
             } else {
-                return Some(());
+                return Some(start[..start.len() - self.0.len()].contains(line_break));
             }
         }
     }
@@ -439,15 +469,17 @@ impl<'a> Literal<'a> {
         Some(ch)
     }
     fn ident(&mut self) -> Option<&'a str> {
-        let head = |b: u8| b.is_ascii_alphabetic() || matches!(b, b'_' | b'$');
-        if !self.0.bytes().next().is_some_and(head) {
+        let head = |c: char| c.is_alphabetic() || matches!(c, '_' | '$');
+        if !self.0.chars().next().is_some_and(head) {
             return None;
         }
         let n = self
             .0
-            .bytes()
-            .take_while(|b| head(*b) || b.is_ascii_digit())
-            .count();
+            .find(|c: char| !head(c) && !c.is_numeric() && c.is_ascii())
+            .unwrap_or(self.0.len());
+        let n = self.0[..n]
+            .find(|c: char| ws(c) || line_break(c))
+            .unwrap_or(n);
         let (id, tail) = self.0.split_at(n);
         self.0 = tail;
         Some(id)
@@ -460,15 +492,24 @@ impl<'a> Literal<'a> {
             if c == q {
                 return String::from_utf16(&out).ok();
             }
+            if line_break(c) {
+                return None;
+            }
             if c == '\\' {
                 c = match self.next()? {
+                    '\r' => {
+                        self.take('\n');
+                        continue;
+                    }
+                    c if line_break(c) => continue,
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',
                     'b' => '\u{8}',
                     'f' => '\u{c}',
                     'v' => '\u{b}',
-                    '0' => '\0',
+                    '0' if !self.0.starts_with(|c: char| c.is_ascii_digit()) => '\0',
+                    '0'..='9' => return None,
                     e @ ('u' | 'x') => {
                         let n = if e == 'u' { 4 } else { 2 };
                         let hex = self.0.get(..n)?;
@@ -485,94 +526,301 @@ impl<'a> Literal<'a> {
             out.extend_from_slice(c.encode_utf16(&mut [0; 2]));
         }
     }
-    fn value(&mut self, depth: usize) -> Option<Value> {
+    fn atom(&mut self, regex: bool, depth: usize) -> Option<&'a str> {
+        if depth > 64 {
+            return None;
+        }
+        let start = self.0;
+        if let Some(id) = self.ident() {
+            return Some(id);
+        }
+        if let Some(number) = NUMBER.find(self.0) {
+            if !number.as_str().starts_with('-') {
+                self.0 = &self.0[number.end()..];
+                return Some(number.as_str());
+            }
+        }
+        match self.next()? {
+            q @ ('\'' | '"') => loop {
+                match self.next()? {
+                    c if c == q => break,
+                    '\\' => {
+                        if self.next()? == '\r' {
+                            self.take('\n');
+                        }
+                    }
+                    c if line_break(c) => return None,
+                    _ => {}
+                }
+            },
+            '`' => loop {
+                match self.next()? {
+                    '`' => break,
+                    '\\' => {
+                        self.next()?;
+                    }
+                    '$' if self.take('{') => self.group('}', depth + 1)?,
+                    _ => {}
+                }
+            },
+            '/' if regex => {
+                let mut class = false;
+                loop {
+                    match self.next()? {
+                        '\\' => {
+                            self.next()?;
+                        }
+                        '[' => class = true,
+                        ']' => class = false,
+                        '/' if !class => break,
+                        c if line_break(c) => return None,
+                        _ => {}
+                    }
+                }
+                self.ident();
+            }
+            '(' => self.group(')', depth + 1)?,
+            '[' => self.group(']', depth + 1)?,
+            '{' => self.group('}', depth + 1)?,
+            ')' | ']' | '}' => return None,
+            c @ ('+' | '-') => {
+                self.take(c);
+            }
+            _ => {}
+        }
+        Some(&start[..start.len() - self.0.len()])
+    }
+    fn group(&mut self, close: char, depth: usize) -> Option<()> {
+        self.scan(&[close], depth)?;
+        self.take(close).then_some(())
+    }
+    fn scan(&mut self, stops: &[char], depth: usize) -> Option<&'a str> {
+        let start = self.0;
+        let mut regex = true;
+        let mut control = false;
+        loop {
+            self.whitespace()?;
+            if self.0.starts_with(stops) {
+                return Some(&start[..start.len() - self.0.len()]);
+            }
+            let token = self.atom(regex, depth)?;
+            regex = (control && token.starts_with('(')) || !ends_expression(token);
+            control = matches!(token, "if" | "while" | "for" | "with" | "switch" | "catch");
+        }
+    }
+    fn statement_end(mut self) -> Option<bool> {
+        let newline = self.whitespace()?;
+        Some(
+            self.0.is_empty()
+                || self.0.starts_with(';')
+                || newline
+                    && !self.0.starts_with(|c: char| {
+                        matches!(
+                            c,
+                            '(' | '['
+                                | '.'
+                                | '`'
+                                | '+'
+                                | '-'
+                                | '*'
+                                | '/'
+                                | '%'
+                                | '<'
+                                | '>'
+                                | '='
+                                | '?'
+                                | ':'
+                                | '&'
+                                | '|'
+                                | '^'
+                                | '!'
+                                | ','
+                        )
+                    })
+                    && !matches!(self.ident(), Some("in" | "instanceof")),
+        )
+    }
+    fn scalar(&mut self, bindings: &Bindings<'_>, immutable: bool) -> Option<Value> {
+        self.whitespace()?;
+        if self.0.starts_with(['\'', '"']) {
+            return self.string().map(Value::String);
+        }
+        if let Some(number) = NUMBER.find(self.0) {
+            self.0 = &self.0[number.end()..];
+            return serde_json::Number::from_f64(number.as_str().parse().ok()?).map(Value::Number);
+        }
+        match self.ident()? {
+            "true" => Some(Value::Bool(true)),
+            "false" => Some(Value::Bool(false)),
+            "null" => Some(Value::Null),
+            name => bindings
+                .get(name)
+                .filter(|(_, stable)| !immutable || *stable)
+                .map(|(value, _)| value.clone()),
+        }
+    }
+    fn value(mut self, bindings: &Bindings<'_>, depth: usize) -> Option<Value> {
         if depth > 64 {
             return None;
         }
         self.whitespace()?;
-        match self.0.chars().next()? {
-            '\'' | '"' => self.string().map(Value::String),
-            '[' => {
-                self.take('[');
+        let value = if self.take('{') {
+            Value::Object(self.object(bindings, depth, false)?)
+        } else if self.take('[') {
+            let mut values = Vec::new();
+            while {
                 self.whitespace()?;
-                let mut values = Vec::new();
-                while !self.take(']') {
-                    values.push(self.value(depth + 1)?);
-                    self.whitespace()?;
-                    if self.take(']') {
-                        break;
-                    }
-                    if !self.take(',') {
-                        return None;
-                    }
-                    self.whitespace()?;
+                !self.take(']')
+            } {
+                let entry = self.scan(&[',', ']'], depth)?;
+                values.push(Literal(entry).value(bindings, depth + 1)?);
+                if !self.take(',') {
+                    self.take(']');
+                    break;
                 }
-                Some(Value::Array(values))
             }
-            '{' => {
-                self.take('{');
-                self.whitespace()?;
-                let mut values = Map::new();
-                while !self.take('}') {
-                    let key = if self.0.starts_with(['\'', '"']) {
-                        self.string()?
-                    } else {
-                        self.ident()?.into()
-                    };
-                    self.whitespace()?;
-                    if !self.take(':') {
+            Value::Array(values)
+        } else {
+            self.scalar(bindings, false)?
+        };
+        self.whitespace()?;
+        self.0.is_empty().then_some(value)
+    }
+    fn object(
+        &mut self,
+        bindings: &Bindings<'_>,
+        depth: usize,
+        root: bool,
+    ) -> Option<Map<String, Value>> {
+        let mut values = Map::new();
+        while {
+            self.whitespace()?;
+            !self.take('}')
+        } {
+            let key = if self.0.starts_with(['\'', '"']) {
+                self.string()?
+            } else {
+                self.ident()?.into()
+            };
+            self.whitespace()?;
+            let expr = if self.take(':') {
+                self.scan(&[',', '}'], depth)?
+            } else if self.0.starts_with([',', '}'])
+                && !matches!(key.as_str(), "null" | "true" | "false")
+            {
+                key.as_str()
+            } else {
+                return None;
+            };
+            let required = matches!(
+                key.as_str(),
+                "id" | "title" | "version" | "requiredVersion" | "modules"
+            );
+            if !root
+                || META.contains(&key.as_str())
+                || matches!(
+                    key.as_str(),
+                    "site" | "iconurl" | "iconUrl" | "iconURL" | "modules"
+                )
+            {
+                let mut p = Literal(expr);
+                p.whitespace()?;
+                let value = if !root || key == "modules" {
+                    if root && !p.0.starts_with('[') {
                         return None;
                     }
-                    values.insert(key, self.value(depth + 1)?);
-                    self.whitespace()?;
-                    if self.take('}') {
-                        break;
-                    }
-                    if !self.take(',') {
-                        return None;
-                    }
-                    self.whitespace()?;
+                    p.value(bindings, depth + 1)
+                } else {
+                    p.scalar(bindings, required)
+                        .filter(|_| p.whitespace().is_some() && p.0.is_empty())
+                };
+                if let Some(value) = value {
+                    values.insert(key, value);
+                } else if root && required {
+                    return None;
+                } else {
+                    values.remove(&key);
                 }
-                Some(Value::Object(values))
             }
-            _ => {
-                if let Some(number) = NUMBER.find(self.0) {
-                    self.0 = &self.0[number.end()..];
-                    return Some(json!(number.as_str().parse::<f64>().ok()?));
-                }
-                match self.ident()? {
-                    "true" => Some(Value::Bool(true)),
-                    "false" => Some(Value::Bool(false)),
-                    "null" => Some(Value::Null),
-                    _ => None,
-                }
+            if !self.take(',') {
+                self.take('}');
+                break;
             }
         }
+        Some(values)
     }
 }
-fn literal(src: &str) -> Option<Value> {
-    if src.len() > LIMIT || ENCRYPTED.is_match(src) {
-        return None;
-    }
-    let mut p = Literal(src);
-    p.whitespace()?;
-    if p.0.starts_with("'use strict'") || p.0.starts_with("\"use strict\"") {
-        p.string()?;
-        p.whitespace()?;
-        p.take(';');
-        p.whitespace()?;
-    }
-    let mut id = p.ident()?;
-    if matches!(id, "var" | "let" | "const") {
-        p.whitespace()?;
-        id = p.ident()?;
-    }
-    p.whitespace()?;
-    if id != "WidgetMetadata" || !p.take('=') {
-        return None;
-    }
-    p.value(1)
+
+enum Metadata {
+    Missing,
+    Invalid,
+    Static(Value),
 }
+
+fn metadata(src: &str) -> Metadata {
+    let scan = || -> Option<Metadata> {
+        let mut p = Literal(src);
+        let mut bindings = Bindings::new();
+        let mut prev = "";
+        let mut direct = true;
+        let mut control = false;
+        let mut guarded = false;
+        loop {
+            let newline = p.whitespace()?;
+            if p.0.is_empty() {
+                return Some(Metadata::Missing);
+            }
+            let mut candidate = p;
+            if direct || newline && ends_expression(prev) && !guarded {
+                let first = candidate.ident();
+                let declaration = first.filter(|id| matches!(*id, "const" | "let" | "var"));
+                let name = if declaration.is_some() {
+                    candidate.whitespace()?;
+                    candidate.ident()
+                } else {
+                    first
+                };
+                if let Some(name) = name {
+                    candidate.whitespace()?;
+                    if candidate.take('=') && !candidate.0.starts_with(['=', '>']) {
+                        if name == "WidgetMetadata" {
+                            let mut read = || {
+                                candidate.whitespace()?;
+                                if !candidate.take('{') {
+                                    return None;
+                                }
+                                let fields = candidate.object(&bindings, 1, true)?;
+                                candidate.statement_end()?.then_some(Value::Object(fields))
+                            };
+                            return Some(read().map_or(Metadata::Invalid, Metadata::Static));
+                        }
+                        if let Some(declaration) = declaration {
+                            bindings.remove(name);
+                            if let Some(value) = candidate.scalar(&bindings, true) {
+                                if candidate.statement_end()? {
+                                    bindings.insert(name, (value, declaration == "const"));
+                                }
+                            }
+                        } else {
+                            bindings.remove(name);
+                        }
+                    }
+                }
+            }
+            let token = p.atom(guarded || !ends_expression(prev), 1)?;
+            guarded = control && token.starts_with('(') || matches!(token, "else" | "do");
+            control = matches!(token, "if" | "while" | "for" | "with" | "switch" | "catch");
+            direct = token == ";" || token.starts_with('{');
+            prev = token;
+        }
+    };
+    if src.len() > LIMIT || src.contains('\0') || ENCRYPTED.is_match(src) {
+        Metadata::Invalid
+    } else {
+        scan().unwrap_or(Metadata::Invalid)
+    }
+}
+
 fn manual(input: &Value, base: Option<&Url>) -> R<Value> {
     if input.is_null() {
         return Ok(json!({}));
@@ -721,12 +969,9 @@ fn js_meta(bytes: &[u8], base: Option<&Url>, fallback: &Value) -> R<Value> {
     if src.trim_matches(ws).is_empty() || src.contains('\0') {
         return Err(fail(422, "模块文件为空或包含二进制内容"));
     }
-    let v = literal(src).ok_or_else(|| {
-        fail(
-            422,
-            "无法静态读取 WidgetMetadata：请将字面量声明置于文件开头",
-        )
-    })?;
+    let Metadata::Static(v) = metadata(src) else {
+        return Err(fail(422, "无法静态读取顶层 WidgetMetadata 或其必填字段"));
+    };
     if !v["modules"].is_array() {
         return Err(fail(422, "WidgetMetadata 缺少 modules 数组"));
     }
@@ -1101,25 +1346,23 @@ fn snapshot<'a>(
         if trimmed.is_empty() {
             return Err(fail(422, "上游模块为空"));
         }
-        if src.contains('\0') && ASSIGNMENT.is_match(src) {
-            return Err(fail(422, "上游明文模块含有空字符"));
-        }
-        if let Some(metadata) = literal(src) {
-            let (version, required) = versions(&metadata)
-                .filter(|_| metadata["modules"].is_array())
-                .ok_or_else(|| fail(422, "上游 WidgetMetadata 不完整或无效"))?;
-            if s(&metadata, "id") != s(m, "id") {
-                return Err(fail(422, "上游 WidgetMetadata ID 与来源模块不一致"));
+        match metadata(src) {
+            Metadata::Static(metadata) => {
+                let (version, required) = versions(&metadata)
+                    .filter(|_| metadata["modules"].is_array())
+                    .ok_or_else(|| fail(422, "上游 WidgetMetadata 不完整或无效"))?;
+                if s(&metadata, "id") != s(m, "id") {
+                    return Err(fail(422, "上游 WidgetMetadata ID 与来源模块不一致"));
+                }
+                return Ok((
+                    version.into(),
+                    required.into(),
+                    true,
+                    content_metadata(&metadata),
+                ));
             }
-            return Ok((
-                version.into(),
-                required.into(),
-                true,
-                content_metadata(&metadata),
-            ));
-        }
-        if ASSIGNMENT.is_match(src) {
-            return Err(fail(422, "无法静态验证上游 WidgetMetadata"));
+            Metadata::Invalid => return Err(fail(422, "无法静态验证上游 WidgetMetadata")),
+            Metadata::Missing => {}
         }
         if trimmed.starts_with(['[', '{']) && serde_json::from_str::<Value>(trimmed).is_ok() {
             return Err(fail(422, "上游返回的是 JSON，而不是模块"));
@@ -1598,6 +1841,87 @@ mod tests {
         .unwrap();
         assert_eq!(version, "1.0");
         assert!(!verified);
+    }
+
+    #[test]
+    fn parses_metadata_after_preamble_without_evaluating_javascript() {
+        let src = r#"
+            // const WidgetMetadata = {title: 'comment'};
+            /* var WidgetMetadata = {title: 'block comment'}; */
+            const string = "; var WidgetMetadata = {title: 'string'};";
+            const template = `; var WidgetMetadata = {title: 'template'}; ${`nested ${'literal'}`}`;
+            const pattern = /; var WidgetMetadata = [}]/;
+            function nested() { const WidgetMetadata = {title: 'function'}; }
+            if (false) WidgetMetadata = {title: 'conditional'};
+            var QDY_UPSTREAM_URL = 'https://example.com/source';
+            var QDY_ICON = 'https://example.com/chart.png';
+            const VERSION = '3.1.0';
+            const TYPE = 'music'
+            var WidgetMetadata = {
+                id: 'forward.quandouya.full', title: '全豆要音源', version: VERSION,
+                requiredVersion: '0.0.1', iconurl: QDY_ICON, site: QDY_UPSTREAM_URL,
+                author: 'Walkman', description: buildDescription(),
+                globalParams: [{value: dynamic(/[},]/, {marker: `},${1}`})}],
+                modules: [{id: 'charts', params: [{n: -.2e+2, value: UNKNOWN, enabled: true}]}],
+                contentType: TYPE, continuousPlay: true,
+            };
+            throw new Error('must not run');
+        "#;
+        let Metadata::Static(value) = metadata(src) else {
+            panic!("expected static metadata");
+        };
+        assert_eq!(value["site"], "https://example.com/source");
+        assert_eq!(
+            value["modules"],
+            json!([{"id":"charts", "params":[{"n":-20.0,"enabled":true}]}])
+        );
+        let meta = js_meta(src.as_bytes(), None, &Value::Null).unwrap();
+        assert_eq!(meta["title"], "全豆要音源");
+        assert_eq!(meta["icon"], "https://example.com/chart.png");
+        assert_eq!(meta["description"], "");
+        let url = Url::parse("https://example.com/widget.js").unwrap();
+        let (version, _, verified, fields) =
+            snapshot(&meta, src.as_bytes(), "text/plain", &url).unwrap();
+        assert_eq!(version, "3.1.0");
+        assert!(verified);
+        assert_eq!(fields["contentType"], "music");
+        assert_eq!(fields["continuousPlay"], true);
+    }
+
+    #[test]
+    fn rejects_dynamic_required_fields_and_ignores_decoys() {
+        let url = Url::parse("https://example.com/widget.js").unwrap();
+        let fallback = json!({"id":"test.id", "title":"A", "version":"1", "requiredVersion":"0"});
+        for body in [
+            "id: makeId(), title: 'A', version: '1', requiredVersion: '0', modules: []",
+            "id: 'test.id', title: 'A' + suffix, version: '1', requiredVersion: '0', modules: []",
+            "id: 'test.id', title: 'A', version: '1', requiredVersion: '0', modules: makeModules()",
+            "id: 'test.id', title: 'A', version: '1', requiredVersion: '0', modules: [...entries]",
+            "id: 'test.id', title: 'A', version: '1', requiredVersion: '0', modules: [], ...overrides",
+            "id: 'test.id', title: 'A', version: '1', requiredVersion: '0', modules: [], ['id']: dynamic",
+        ] {
+            let src = format!("const unused = true; const WidgetMetadata = {{{body}}};");
+            assert!(js_meta(src.as_bytes(), None, &fallback).is_err(), "{body}");
+            assert!(snapshot(&fallback, src.as_bytes(), "text/javascript", &url).is_err(), "{body}");
+        }
+        for src in [
+            "const WidgetMetadata = buildMetadata();",
+            "let version = '1'; version = getVersion(); const WidgetMetadata = {id:'test.id', title:'A', version, requiredVersion:'0', modules:[]};",
+            "const WidgetMetadata = {id:'test.id', title:'A', version:'1', requiredVersion:'0', modules:[]}\n.override();",
+        ] {
+            assert!(snapshot(&fallback, src.as_bytes(), "text/javascript", &url).is_err(), "{src}");
+        }
+        let decoy = br#"const note = 'var WidgetMetadata = {id:"fake"};';
+            /* var WidgetMetadata = {}; */
+            function nested() { const WidgetMetadata = {}; }
+            container.WidgetMetadata = {};
+        "#;
+        assert!(js_meta(decoy, None, &fallback).is_err());
+        assert!(
+            !snapshot(&fallback, decoy, "text/javascript", &url)
+                .unwrap()
+                .2
+        );
     }
 
     #[tokio::test]

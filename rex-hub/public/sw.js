@@ -1,4 +1,4 @@
-const CACHE='rex-hub-shell-0.0.9';
+const CACHE='rex-hub-shell-0.0.10';
 const ICONS='rex-hub-icons-v1';
 const externalCache=()=>`rex-hub-upstream-icons-${Math.floor(Date.now()/604800000)}`;
 const externalPending=new Map();

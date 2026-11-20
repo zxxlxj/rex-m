@@ -1,3 +1,7 @@
+import { parse } from './vendor/acorn.mjs';
+
+const fields=new Set(['id','title','version','requiredVersion','description','author','icon','iconurl','iconURL','iconUrl','contentType','continuousPlay','modules']);
+const unknown=Symbol('unknown');
 
 export function rejectEncrypted(source) {
   if (/^\s*(?:\/\/\s*)?REXENC/i.test(source)) throw new Error('加密模块请在 App 内测试');
@@ -5,53 +9,46 @@ export function rejectEncrypted(source) {
 export function parseManifestLiteral(source) {
   rejectEncrypted(source);
   if (source.length > 8 * 1024 * 1024) throw new Error('模块超过 8 MiB');
-  let i = 0, depth = 0;
-  function ws() {
-    for (;;) {
-      while (/\s/.test(source[i] || '') && i < source.length) i++;
-      if (source.startsWith('//', i)) { const end = source.indexOf('\n', i); i = end < 0 ? source.length : end; }
-      else if (source.startsWith('/*', i)) { const end = source.indexOf('*/', i + 2); if (end < 0) throw Error('注释未闭合'); i = end + 2; }
-      else break;
+  const {body}=parse(source,{ecmaVersion:'latest',sourceType:'script',allowHashBang:true});
+  const constants=new Map();let manifest;
+  function read(node,depth=0){
+    if(!node||depth>32)return unknown;
+    if(node.type==='Literal'&&!node.regex&&node.bigint===undefined)return node.value;
+    if(node.type==='Identifier')return constants.has(node.name)?constants.get(node.name):unknown;
+    if(node.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked??unknown;
+    if(node.type==='BinaryExpression'&&node.operator==='+'){
+      const a=read(node.left,depth+1),b=read(node.right,depth+1);
+      if(typeof a==='string'&&typeof b==='string'&&a.length+b.length<=16_384)return a+b;
+    }
+    return unknown;
+  }
+  function take(node){
+    if(manifest||node?.type!=='ObjectExpression')throw Error('WidgetMetadata 需要唯一的顶层对象声明');
+    manifest=Object.create(null);
+    for(const p of node.properties){
+      if(p.type!=='Property'||p.computed||p.kind!=='init'||p.method)continue;
+      const key=p.key.type==='Identifier'?p.key.name:p.key.value;
+      if(!fields.has(key))continue;
+      const v=key==='modules'&&p.value.type==='ArrayExpression'?[]:read(p.value);
+      if(v===unknown)delete manifest[key];else manifest[key]=v;
     }
   }
-  function str() {
-    const q = source[i++]; let out = '';
-    while (i < source.length) {
-      const c = source[i++]; if (c === q) return out;
-      if (c !== '\\') { out += c; continue; }
-      const e = source[i++];
-      if (e === 'u' || e === 'x') {
-        const n = e === 'u' ? 4 : 2, hex = source.slice(i, i+n);
-        if (!new RegExp(`^[0-9a-fA-F]{${n}}$`).test(hex)) throw Error('非法字符转义');
-        out += String.fromCharCode(parseInt(hex, 16)); i += n;
-      } else out += ({n:'\n',r:'\r',t:'\t',b:'\b',f:'\f',v:'\v','0':'\0'}[e] ?? e);
-    }
-    throw Error('字符串未闭合');
-  }
-  function ident() { const m = /^[A-Za-z_$][\w$]*/.exec(source.slice(i)); if (!m) throw Error(`需要字面量，位置 ${i}`); i += m[0].length; return m[0]; }
-  function value() {
-    ws(); if (++depth > 64) throw Error('声明嵌套过深');
-    let v;
-    if (source[i] === '"' || source[i] === "'") v = str();
-    else if (source[i] === '{' || source[i] === '[') {
-      const array = source[i++] === '[', close = array ? ']' : '}'; v = array ? [] : Object.create(null); ws();
-      while (source[i] !== close) {
-        if (array) v.push(value());
-        else { ws(); const k = /["']/.test(source[i] || '') ? str() : ident(); ws(); if (source[i++] !== ':') throw Error('静态声明不支持计算属性或简写'); v[k] = value(); }
-        ws(); if (source[i] === close) break;
-        if (source[i++] !== ',') throw Error(`需要逗号，位置 ${i}`); ws();
+  for(const statement of body){
+    if(statement.type==='VariableDeclaration'){
+      for(const entry of statement.declarations){
+        if(entry.id.type!=='Identifier')continue;
+        const name=entry.id.name;
+        if(name==='WidgetMetadata'){if(entry.init)take(entry.init);continue;}
+        if(!manifest){const value=read(entry.init);if(value===unknown)constants.delete(name);else constants.set(name,value);}
       }
-      i++;
-    } else {
-      const m = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/i.exec(source.slice(i));
-      if (m) { v = Number(m[0]); i += m[0].length; }
-      else { const k = ident(); if (!['true','false','null'].includes(k)) throw Error('静态校验只支持字面量 WidgetMetadata；表达式请在隔离运行环境解析'); v = {true:true,false:false,null:null}[k]; }
+    }else if(statement.type==='ExpressionStatement'){
+      const e=statement.expression;
+      if(e.type==='AssignmentExpression'&&e.left.type==='Identifier'){
+        if(e.left.name==='WidgetMetadata')take(e.operator==='='?e.right:null);
+        else constants.delete(e.left.name);
+      }else if(e.type==='UpdateExpression'&&e.argument.type==='Identifier'){constants.delete(e.argument.name);}
     }
-    depth--; return v;
   }
-
-  ws(); if (source.startsWith('"use strict"',i) || source.startsWith("'use strict'",i)) { str(); ws(); if(source[i]===';') i++; ws(); }
-  let name = ident(); if (['var','let','const'].includes(name)) { ws(); name = ident(); }
-  ws(); if (name !== 'WidgetMetadata' || source[i++] !== '=') throw Error('静态校验要求文件开头为 WidgetMetadata 字面量声明（可含注释）');
-  return value();
+  if(!manifest||!['id','title','version','requiredVersion'].every(k=>typeof manifest[k]==='string'&&manifest[k].trim())||!Array.isArray(manifest.modules))throw Error('无法静态确定必要的模块元数据');
+  return manifest;
 }

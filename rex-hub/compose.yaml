@@ -1,7 +1,7 @@
 services:
   rex-hub:
     build: .
-    image: rex-hub:0.0.9
+    image: rex-hub:0.0.10
     restart: unless-stopped
     init: true
     read_only: true

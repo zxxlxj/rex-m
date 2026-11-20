@@ -4,10 +4,10 @@ Rust + Axum + SQLite。与 Worker 版共用 UI、PWA 和图标，使用独立数
 
 ## 直接运行（推荐，无需编译）
 
-公开成品镜像支持 `linux/amd64` 和 `linux/arm64`，可匿名拉取。建议固定 `0.0.9`，不要依赖会变化的 `latest`。
+公开成品镜像支持 `linux/amd64` 和 `linux/arm64`，可匿名拉取。建议固定 `0.0.10`，不要依赖会变化的 `latest`。
 
 ```bash
-docker pull ghcr.io/zxxlxj/rex-hub:0.0.9
+docker pull ghcr.io/zxxlxj/rex-hub:0.0.10
 umask 077
 printf 'SETUP_TOKEN=%s\n' "$(openssl rand -hex 32)" > rex-hub.env
 
@@ -16,7 +16,7 @@ docker run -d --name rex-hub --restart unless-stopped \
   --env-file rex-hub.env \
   -e PUBLIC_ORIGIN=http://localhost:8080 \
   -v rex-hub-data:/data \
-  ghcr.io/zxxlxj/rex-hub:0.0.9
+  ghcr.io/zxxlxj/rex-hub:0.0.10
 ```
 
 打开 `http://localhost:8080`，用 `rex-hub.env` 中的初始化令牌设置至少 12 个字符的管理员密码。没有默认密码。默认只监听宿主机回环地址；用手机访问 NAS 请按下节配置。已有环境文件时，不要再次执行生成令牌的命令覆盖它。
@@ -36,4 +36,4 @@ docker run -d --name rex-hub --restart unless-stopped \
 
 ## 从源码构建（可选）
 
-`docker build -t rex-hub:0.0.9 .` 使用多阶段构建。最终镜像不含 Rust 工具链。也可在装了 Rust 与 SQLite 开发库的 Linux 上运行 `cargo test --locked --manifest-path docker/Cargo.toml`。
+`docker build -t rex-hub:0.0.10 .` 使用多阶段构建。最终镜像不含 Rust 工具链。也可在装了 Rust 与 SQLite 开发库的 Linux 上运行 `cargo test --locked --manifest-path docker/Cargo.toml`。
