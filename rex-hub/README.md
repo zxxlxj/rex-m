@@ -96,6 +96,4 @@ npm run dev
 
 将 `.dev.vars.example` 复制为 `.dev.vars`，填写本地 `SETUP_TOKEN`；本地 HTTP 开发需要时可以另外设 `AUTH_ALLOW_INSECURE_LOCALHOST=1`。不要将 `.dev.vars` 提交到仓库。
 
-Rex Hub 自有代码采用 [MIT 许可证](./LICENSE)，允许在保留版权与许可声明的前提下使用、修改、分发及商用。第三方依赖、Rex 标志及参考角色素材不因本许可改变原有权利。这份许可不覆盖仓库内其他项目。
-
 Rex 标志来自 [Rex 官方模块站](https://modules.rexnow.app/)，用于标识兼容平台；Rex Hub 并非 Rex 官方产品。
