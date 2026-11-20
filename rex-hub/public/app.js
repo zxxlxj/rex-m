@@ -752,9 +752,9 @@ document.addEventListener('change',event=>{
 });
 async function boot(throwError=false){
   try{
-    session=await api('session');
+    session=await api('bootstrap');
     if(!session || typeof session.initialized !== 'boolean' || typeof session.authenticated !== 'boolean')throw Error('会话响应无效。');
-    if(session.authenticated)await load();
+    if(session.authenticated){if(!session.state)throw Error('未收到后台数据。');state=normalizeState(session.state);delete session.state;}else state=blank();
     render();
   }catch(e){
     if(throwError)throw e;

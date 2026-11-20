@@ -141,21 +141,25 @@ function publish(st,d,origin,confirmed){
   appendLog(st,`发布「${d.title}」：${next.manifest.widgets.length} 个模块`);
   return {ok:true,count:next.manifest.widgets.length};
 }
+async function dashboardState(env,origin){
+    const {st}=await get(env);
+    const classify=categoryResolver(st,originFor(env,st,origin));
+    return {...st,categories:st.categories.map(c=>({...c,autoRule:normalizeAutoRule(c.autoRule)})),sources:st.sources.map(s=>({...s,modules:s.modules.map(m=>({...m,effectiveCategoryId:classify(s,m)}))}))};
+}
 async function admin(req,env,url){
   const path=url.pathname, origin=url.origin;
   if(req.method==='POST'&&req.headers.get('Origin')!==origin)fail(403,'请求来源不匹配');
-  if(path==='/api/session'&&req.method==='GET')return json(await session(req,env));
+  if(path==='/api/bootstrap'&&req.method==='GET'){
+    const info=await session(req,env);
+    return json(info.authenticated?{...info,state:await dashboardState(env,origin)}:info);
+  }
+  if(path==='/api/session' &&req.method==='GET')return json(await session(req,env));
   if(req.method==='POST'&&path==='/api/setup')return setup(req,env,await input(req,16384));
   if(req.method==='POST'&&path==='/api/login')return login(req,env,await input(req,16384));
   if(req.method==='POST'&&path==='/api/logout')return logout(req,env,await input(req,16384));
   if(!(await session(req,env)).authenticated)fail(401,'请先登录');
   if(path==='/api/badges'||path.startsWith('/api/badges/'))return badgeApi(req,env,url,req.method==='POST'?await input(req,10_800_000):undefined);
-  if(req.method==='GET'&&path==='/api/state'){
-    const {st}=await get(env);
-    const classify=categoryResolver(st,originFor(env,st,origin));
-    return json({...st,categories:st.categories.map(c=>({...c,autoRule:normalizeAutoRule(c.autoRule)})),
-      sources:st.sources.map(s=>({...s,modules:s.modules.map(m=>({...m,effectiveCategoryId:classify(s,m)}))}))});
-  }
+  if(req.method==='GET'&&path==='/api/state')return json(await dashboardState(env,origin));
   if(req.method==='GET'&&path==='/api/preview'){
     const {st}=await get(env);const d=by(st.distributions,url.searchParams.get('id'),'分发');
     const next=build(st,d,originFor(env,st,origin));
@@ -331,7 +335,8 @@ export default {
       }
       if(path.startsWith('/files/')||path.startsWith('/icons/'))return await publicFile(req,env,path);
       const asset=await env.ASSETS.fetch(req);const response=new Response(asset.body,asset);
-      response.headers.set('X-Content-Type-Options','nosniff');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('X-Frame-Options','DENY');
+      if(response.ok && /^(?:\/rex-dino-(?:0[1-9]|1[0-9]|2[0-4])\.png|\/pull-rex-collection\.png)$/.test(path))response.headers.set('Cache-Control','public, max-age=604800');
+      response.headers.set('X-Content-Type-Options' ,'nosniff');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('X-Frame-Options','DENY');
       response.headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
       return response;
     }catch(e){if(e?.status>=400&&e.status<500)return json({error:e.message,...(e.code==='confirm_publish'?{code:e.code}:{})},e.status);console.error('Worker request failed',e?.name);return json({error:'服务暂不可用，请检查绑定或稍后重试'},500);}

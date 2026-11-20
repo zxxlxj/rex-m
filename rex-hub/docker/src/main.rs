@@ -186,6 +186,14 @@ async fn route(app: &Arc<App>, req: Request) -> Result<Response> {
             return Err(err(403, "请求来源不匹配"));
         }
         let (initialized, authenticated) = auth::status(app, &headers, app.secure)?;
+        if path == "/api/bootstrap" && method == Method::GET {
+            let mut value =
+                serde_json::json!({"initialized":initialized,"authenticated":authenticated});
+            if authenticated {
+                value["state"] = state::dashboard(app)?;
+            }
+            return Ok(json(value));
+        }
         if path == "/api/session" && method == Method::GET {
             return Ok(json(
                 serde_json::json!({"initialized":initialized,"authenticated":authenticated}),
@@ -290,7 +298,13 @@ async fn route(app: &Arc<App>, req: Request) -> Result<Response> {
     {
         return Err(err(404, "页面不存在"));
     }
-    file(&app.web, k, head, mime(k), "no-cache").await
+    let cache =
+        if k.starts_with("rex-dino-") && k.ends_with(".png") || k == "pull-rex-collection.png" {
+            "public, max-age=604800"
+        } else {
+            "no-cache"
+        };
+    file(&app.web, k, head, mime(k), cache).await
 }
 async fn handler(State(app): State<Arc<App>>, req: Request) -> Response {
     let path = req.uri().path().to_owned();
@@ -359,7 +373,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .dns_resolver(Arc::new(sources::PublicDns))
-        .user_agent("RexHub-Docker/0.0.7")
+        .user_agent("RexHub-Docker/0.0.8")
         .build()?;
     let setup_token = env::var("SETUP_TOKEN_FILE")
         .ok()

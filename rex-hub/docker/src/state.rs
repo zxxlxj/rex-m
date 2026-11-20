@@ -857,6 +857,12 @@ pub async fn public(app: &App, path: &str, head: bool, headers: &HeaderMap) -> R
     }
     Err(err(404, "分发不存在"))
 }
+pub fn dashboard(app: &App) -> Result<Value> {
+    let mut st = get(app)?;
+    st["origin"] = json!(app.origin);
+    attach_categories(&mut st, &app.origin);
+    Ok(st)
+}
 pub async fn api(
     app: &App,
     path: &str,
@@ -865,12 +871,10 @@ pub async fn api(
     a: &Value,
 ) -> Result<Response> {
     if method == Method::GET {
-        let mut st = get(app)?;
         if path == "/api/state" {
-            attach_categories(&mut st, &app.origin);
-            st["origin"] = json!(app.origin);
-            return Ok(json(st));
+            return Ok(json(dashboard(app)?));
         }
+        let st = get(app)?;
         if path == "/api/preview" {
             let d = &st["distributions"][index(
                 &st["distributions"],

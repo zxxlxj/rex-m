@@ -214,3 +214,14 @@ test('category-only edits classify existing and arriving modules and republish w
   assert.deepEqual(await published(),['first','second']);
   assert.equal((await req('/api/state')).parse().distributions[0].publishWarning,'异常批量移除');
 });
+
+test('bootstrap returns private dashboard only with an authenticated session',async t=>{
+ const req=fixture(t);
+ assert.deepEqual((await req('/api/bootstrap')).parse(),{initialized:false,authenticated:false});
+ await req('/api/setup',{token:secret,password:'A long test password!'},201);
+ await req('/api/category',{name:'首屏测试'});
+ const boot=(await req('/api/bootstrap')).parse();
+ assert.equal(boot.authenticated,true);assert.equal(boot.state.categories[0].name,'首屏测试');
+ await req('/api/logout',{});
+ assert.deepEqual((await req('/api/bootstrap')).parse(),{initialized:true,authenticated:false});
+});

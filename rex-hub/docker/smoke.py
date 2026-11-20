@@ -21,9 +21,11 @@ assert request('/healthz')['ok']
 assert b'REX Hub' in request('/', decoder=bytes)
 request('/api/state', status=401)
 assert not request('/api/session')['initialized']
+assert 'state' not in request('/api/bootstrap')
 request('/api/setup', {'token': token, 'password': password}, status=201)
 assert request('/api/session')['authenticated']
 request('/api/category', {'name': '测试'})
+assert request('/api/bootstrap')['state']['categories'][0]['name'] == '测试'
 cat = request('/api/state')['categories'][0]['id']
 request('/api/distribution', {'key': 'test-hub', 'title': 'Smoke', 'mode': 'rules', 'categoryIds': [cat], 'enabled': True, 'publish': True, 'confirmEmpty': True})
 module = 'var WidgetMetadata = {id:"rex.smoke",title:"Smoke",author:"Example Author",version:"1.0.0",requiredVersion:"0.0.7",contentType:"music",continuousPlay:false,modules:[]};'
